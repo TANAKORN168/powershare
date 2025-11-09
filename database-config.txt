@@ -1,0 +1,6 @@
+url : https://supabase.com/dashboard
+Project name : Powershare
+Database Password : $j_NY4H48afC6%L
+
+Project URL : https://lizyjuvbyuygsezyhpwr.supabase.co
+API Key : eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpenlqdXZieXV5Z3NlenlocHdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIxNTUyMzksImV4cCI6MjA2NzczMTIzOX0.91fgESB0_0P_9X7qDd-YfCGYgBywcE5hWYd6aX6kIRg
