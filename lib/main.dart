@@ -4,7 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:powershare/preloadPage.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized(); // สำคัญมาก
+  WidgetsFlutterBinding.ensureInitialized(); // สำคัญมากๆ
   // 🔒 ล็อกเฉพาะแนวตั้ง
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
