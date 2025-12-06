@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:powershare/pages/cartPage.dart';
 import 'package:powershare/pages/profilePage.dart';
 import 'package:powershare/pages/savedProductsPage.dart';
@@ -8,6 +10,7 @@ import 'package:powershare/pages/rentalHistoryPage.dart';
 import 'package:powershare/pages/adminPage.dart';
 import 'basePage.dart';
 import 'package:powershare/services/session.dart';
+import 'package:powershare/services/apiServices.dart';
 
 class MainLayout extends StatefulWidget {
   final int currentIndex;
@@ -56,6 +59,7 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   late int _selectedIndex;
   late bool _isAdmin; // เก็บสถานะจริงจาก session หรือ widget.isAdmin
+  Timer? _cartTimer;
 
   // เปลี่ยนจาก final list เป็น getter เพื่อรองรับการแสดง admin แบบ dynamic
   List<Widget> get pages => [
@@ -72,19 +76,26 @@ class _MainLayoutState extends State<MainLayout> {
   void initState() {
     super.initState();
     _selectedIndex = widget.currentIndex;
-
-    // เริ่มด้วยค่าที่ถูกส่งเข้ามาเป็น default
     _isAdmin = widget.isAdmin;
-
-    // ถ้ามี user ใน session ให้ตั้งค่า isAdmin ตาม role ของ user
     final user = Session.instance.user;
     if (user != null) {
       final role = (user['role'] as String?) ?? '';
       _isAdmin = role.toLowerCase() == 'admin';
     }
-
-    // ป้องกันค่า index เกินขอบเขต เมื่อมี/ไม่มี admin tab
     if (_selectedIndex >= pages.length) _selectedIndex = 0;
+
+    // โหลดจำนวนรายการตะกร้าจาก server
+    _loadCartCount();
+    // เริ่ม polling แบบเบา ๆ เพื่อให้ badge อัพเดตเป็น "real time"
+    _cartTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      _loadCartCount();
+    });
+  }
+
+  @override
+  void dispose() {
+    _cartTimer?.cancel();
+    super.dispose();
   }
 
   void switchToTab(int index) {
@@ -99,10 +110,10 @@ class _MainLayoutState extends State<MainLayout> {
     });
   }
 
+  int _cartItemCount = 0; // ตัวอย่างจำนวนสินค้าในตะกร้า
+
   @override
   Widget build(BuildContext context) {
-    int _cartItemCount = 3; // ตัวอย่างจำนวนสินค้าในตะกร้า
-
     // สร้างรายการ BottomNavigationBarItem แบบ dynamic
     final items = <BottomNavigationBarItem>[
       BottomNavigationBarItem(icon: Icon(Icons.home), label: 'หน้าแรก'),
@@ -122,14 +133,22 @@ class _MainLayoutState extends State<MainLayout> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   constraints: BoxConstraints(minWidth: 16, minHeight: 16),
-                  child: Text(
-                    '$_cartItemCount',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                  // AnimatedSwitcher จะทำให้ตัวเลขเปลี่ยนด้วยอนิเมชัน (scale/fade)
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    transitionBuilder: (child, anim) =>
+                        ScaleTransition(scale: anim, child: child),
+                    child: Text(
+                      '$_cartItemCount',
+                      // Key สำคัญ — ทำให้ AnimatedSwitcher แยกแยะการเปลี่ยนแปลง
+                      key: ValueKey<int>(_cartItemCount),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    textAlign: TextAlign.center,
                   ),
                 ),
               ),
@@ -157,7 +176,7 @@ class _MainLayoutState extends State<MainLayout> {
       icon: Icon(Icons.person_outline),
       label: 'บัญชี',
     ));
-    
+
     return Scaffold(
       body: pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
@@ -170,4 +189,30 @@ class _MainLayoutState extends State<MainLayout> {
       ),
     );
   }
+
+  Future<void> _loadCartCount() async {
+    try {
+      final user = Session.instance.user;
+      if (kDebugMode) print('MainLayout._loadCartCount: session.user=$user');
+      if (user == null) return;
+      final userId = user['id']?.toString();
+      if (userId == null || userId.isEmpty) {
+        if (kDebugMode) print('MainLayout._loadCartCount: userId missing');
+        return;
+      }
+      if (kDebugMode) print('MainLayout._loadCartCount: calling ApiServices.getCartItemCountForUser for userId=$userId');
+      final count = await ApiServices.getCartItemCountForUser(userId);
+      if (kDebugMode) print('MainLayout._loadCartCount: got count=$count (current=$_cartItemCount)');
+      if (mounted && _cartItemCount != count) {
+        setState(() {
+          _cartItemCount = count;
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) print('loadCartCount error: $e');
+    }
+  }
+
+  // ให้เรียกแบบ: MainLayout.of(context)?.refreshCartCount();
+  void refreshCartCount() => _loadCartCount();
 }

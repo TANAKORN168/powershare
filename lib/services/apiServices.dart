@@ -936,6 +936,235 @@ class ApiServices {
       return false;
     }
   }
+
+  /// ดึง cart_items ของผู้ใช้ (จะเลือก cart ล่าสุดที่ status = 'pending')
+  /// คืนค่า List ของ item แต่ละชิ้นที่มีข้อมูล product (ถ้ามี)
+  static Future<List<Map<String, dynamic>>> getCartItemsForUser(String userId) async {
+    try {
+      // ใช้ JWT ของ session ถ้ามี (fallback เป็น apiKey)
+      final token = Session.instance.accessToken ?? apiKey;
+      final headers = {
+        'apikey': apiKey,
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      };
+
+      // 1) หา cart ล่าสุดของผู้ใช้ที่ status = pending
+      final cartUrl = Uri.parse('$baseUrl/rest/v1/carts?user_id=eq.$userId&status=eq.pending&order=created_at.desc&limit=1');
+      if (kDebugMode) {
+        print('getCartItemsForUser: GET $cartUrl');
+        print('getCartItemsForUser.headers: $headers');
+      }
+      final cartResp = await http.get(cartUrl, headers: headers);
+      if (kDebugMode) print('getCartItemsForUser.carts: status=${cartResp.statusCode} body=${cartResp.body}');
+      if (cartResp.statusCode != 200) {
+        if (kDebugMode) print('getCartItemsForUser: carts request failed -> ${cartResp.statusCode}');
+        return [];
+      }
+
+      final List<dynamic> carts = jsonDecode(cartResp.body) as List<dynamic>;
+      if (carts.isEmpty) return [];
+
+      final cartId = (carts.first as Map)['id'].toString();
+
+      // 2) ดึง cart_items ของ cartId
+      final itemsUrl = Uri.parse('$baseUrl/rest/v1/cart_items?cart_id=eq.$cartId');
+      if (kDebugMode) print('getCartItemsForUser: GET $itemsUrl');
+      final itemsResp = await http.get(itemsUrl, headers: headers);
+      if (kDebugMode) print('getCartItemsForUser.cart_items: status=${itemsResp.statusCode} body=${itemsResp.body}');
+      if (itemsResp.statusCode != 200) {
+        if (kDebugMode) print('getCartItemsForUser: cart_items request failed -> ${itemsResp.statusCode}');
+        return [];
+      }
+
+      final List<dynamic> items = jsonDecode(itemsResp.body) as List<dynamic>;
+      if (items.isEmpty) return [];
+
+      // 3) รวบ product ids และดึงข้อมูล product แบบเป็นชุด
+      final productIds = items
+          .map((e) => (e['product_id'] ?? '').toString())
+          .where((s) => s.isNotEmpty)
+          .toSet()
+          .toList();
+
+      List<Map<String, dynamic>> products = [];
+      if (productIds.isNotEmpty) {
+        // Supabase expects id=in.(id1,id2). Ensure ids are safe (no spaces) and separated by commas.
+        final joined = productIds.map((id) => id.trim()).join(',');
+        final prodUrl = Uri.parse('$baseUrl/rest/v1/products?id=in.($joined)');
+        if (kDebugMode) print('getCartItemsForUser: GET $prodUrl');
+        final prodResp = await http.get(prodUrl, headers: headers);
+        if (kDebugMode) print('getCartItemsForUser.products: status=${prodResp.statusCode} body=${prodResp.body}');
+        if (prodResp.statusCode == 200) {
+          try {
+            products = (jsonDecode(prodResp.body) as List<dynamic>).cast<Map<String, dynamic>>();
+          } catch (e) {
+            if (kDebugMode) print('getCartItemsForUser: failed to parse products body: $e');
+          }
+        }
+      }
+
+      // 4) สร้าง map product_id -> product
+      final Map<String, Map<String, dynamic>> prodMap = {};
+      for (final p in products) {
+        if (p['id'] != null) prodMap[p['id'].toString()] = p;
+      }
+
+      // 5) รวมข้อมูลกลับเป็นรายการที่ UI คาดหวัง
+      final result = items.map<Map<String, dynamic>>((it) {
+        final pid = (it['product_id'] ?? '').toString();
+        final prod = prodMap[pid];
+        return {
+          'cart_id': cartId,
+          'item_id': it['id']?.toString() ?? '',
+          'product_id': pid,
+          'name': prod != null ? (prod['name'] ?? prod['title'] ?? 'สินค้า') : (it['name'] ?? 'สินค้า'),
+          'price': (it['unit_price'] ?? prod?['rent_amount'] ?? 0),
+          'image': prod != null ? (prod['image'] ?? prod['image_url'] ?? '') : '',
+          'quantity': it['quantity'] ?? 1,
+          'rent_start': it['rent_start'],
+          'rent_end': it['rent_end'],
+        };
+      }).toList();
+
+      return result;
+    } catch (e, st) {
+      if (kDebugMode) {
+        print('getCartItemsForUser exception: $e');
+        print(st);
+      }
+      return [];
+    }
+  }
+
+  /// ลบ cart_item และอัพเดตสถานะสินค้า + ยอดรวมของ cart
+  static Future<bool> deleteCartItem(String itemId, {String? productId, String? cartId}) async {
+    try {
+      final userToken = Session.instance.accessToken;
+      if (userToken == null || userToken.isEmpty) {
+        if (kDebugMode) print('deleteCartItem: missing user token');
+        return false;
+      }
+
+      final headers = {
+        'apikey': apiKey,
+        'Authorization': 'Bearer $userToken',
+        'Content-Type': 'application/json',
+      };
+
+      // 1) ลบ cart_item
+      final urlDel = Uri.parse('$baseUrl/rest/v1/cart_items?id=eq.$itemId');
+      final delResp = await http.delete(urlDel, headers: headers);
+      if (kDebugMode) print('deleteCartItem.delete: status=${delResp.statusCode} body=${delResp.body}');
+      if (!(delResp.statusCode == 200 || delResp.statusCode == 204)) {
+        return false;
+      }
+
+      // 2) ถ้ามี productId -> อัพเดตสถานะ product กลับเป็น Available
+      if (productId != null && productId.isNotEmpty) {
+        final urlProd = Uri.parse('$baseUrl/rest/v1/products?id=eq.$productId');
+        final prodResp = await http.patch(
+          urlProd,
+          headers: headers,
+          body: jsonEncode({'last_status': 'Available', 'updated_at': DateTime.now().toIso8601String()}),
+        );
+        if (kDebugMode) print('deleteCartItem.updateProduct: status=${prodResp.statusCode} body=${prodResp.body}');
+      }
+
+      // 3) ถ้ามี cartId -> คำนวณยอดรวมใหม่และอัพเดต carts.total_amount
+      if (cartId != null && cartId.isNotEmpty) {
+        final itemsUrl = Uri.parse('$baseUrl/rest/v1/cart_items?cart_id=eq.$cartId');
+        final itemsResp = await http.get(itemsUrl, headers: headers);
+        if (kDebugMode) print('deleteCartItem.fetchItems: status=${itemsResp.statusCode} body=${itemsResp.body}');
+        if (itemsResp.statusCode == 200) {
+          final List<dynamic> items = jsonDecode(itemsResp.body) as List<dynamic>;
+          double total = 0.0;
+          for (final it in items) {
+            final unit = (it['unit_price'] is num) ? (it['unit_price'] as num).toDouble() : double.tryParse(it['unit_price']?.toString() ?? '0') ?? 0.0;
+            final qty = (it['quantity'] is num) ? (it['quantity'] as num).toDouble() : double.tryParse(it['quantity']?.toString() ?? '0') ?? 0.0;
+            total += unit * qty;
+          }
+          final urlUpdate = Uri.parse('$baseUrl/rest/v1/carts?id=eq.$cartId');
+          final respUpd = await http.patch(urlUpdate, headers: headers, body: jsonEncode({'total_amount': total, 'updated_at': DateTime.now().toIso8601String()}));
+          if (kDebugMode) print('deleteCartItem.updateCartTotal: status=${respUpd.statusCode} body=${respUpd.body}');
+
+          return true;
+        } else {
+          if (kDebugMode) print('deleteCartItem: failed to fetch remaining items: ${itemsResp.statusCode}');
+        }
+      }
+
+      return true;
+    } catch (e, st) {
+      if (kDebugMode) {
+        print('deleteCartItem exception: $e');
+        print(st);
+      }
+      return false;
+    }
+  }
+
+  /// คืนจำนวน cart_items ของ cart ล่าสุดของ user (fallback โดยไม่กรอง status)
+  static Future<int> getCartItemCountForUser(String userId) async {
+    try {
+      final token = Session.instance.accessToken ?? apiKey;
+      final headers = {
+        'apikey': apiKey,
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      };
+
+      // 1) พยายามหา cart ล่าสุดของผู้ใช้ (ไม่จำกัด status)
+      final cartUrl = Uri.parse('$baseUrl/rest/v1/carts?user_id=eq.$userId&order=created_at.desc&limit=1');
+      if (kDebugMode) print('getCartItemCountForUser: GET $cartUrl');
+      final cartResp = await http.get(cartUrl, headers: headers);
+      if (kDebugMode) print('getCartItemCountForUser.carts: status=${cartResp.statusCode} body=${cartResp.body}');
+      if (cartResp.statusCode == 200) {
+        final List<dynamic> carts = jsonDecode(cartResp.body) as List<dynamic>;
+        if (carts.isNotEmpty) {
+          final cartId = (carts.first as Map)['id'].toString();
+          // ดึงจำนวน cart_items สำหรับ cartId
+          final itemsUrl = Uri.parse('$baseUrl/rest/v1/cart_items?cart_id=eq.$cartId&select=id');
+          if (kDebugMode) print('getCartItemCountForUser: GET $itemsUrl');
+          final itemsResp = await http.get(itemsUrl, headers: headers);
+          if (kDebugMode) print('getCartItemCountForUser.cart_items: status=${itemsResp.statusCode} body=${itemsResp.body}');
+          if (itemsResp.statusCode == 200) {
+            final List<dynamic> items = jsonDecode(itemsResp.body) as List<dynamic>;
+            if (kDebugMode) print('getCartItemCountForUser: cartId=$cartId count=${items.length}');
+            return items.length;
+          } else {
+            if (kDebugMode) print('getCartItemCountForUser: failed to fetch cart_items for cartId=$cartId');
+          }
+        } else {
+          if (kDebugMode) print('getCartItemCountForUser: no carts found for userId=$userId');
+        }
+      } else {
+        if (kDebugMode) print('getCartItemCountForUser: carts request failed with ${cartResp.statusCode}');
+      }
+
+      // 2) FALLBACK: ดึง cart_items โดย join กับ cart และกรอง cart.user_id
+      // Supabase REST สามารถ embed ความสัมพันธ์: select=id,cart(user_id)
+      final fallbackUrl = Uri.parse('$baseUrl/rest/v1/cart_items?select=id,cart(user_id)&cart.user_id=eq.$userId');
+      if (kDebugMode) print('getCartItemCountForUser: FALLBACK GET $fallbackUrl');
+      final fallbackResp = await http.get(fallbackUrl, headers: headers);
+      if (kDebugMode) print('getCartItemCountForUser.fallback: status=${fallbackResp.statusCode} body=${fallbackResp.body}');
+      if (fallbackResp.statusCode == 200) {
+        final List<dynamic> items = jsonDecode(fallbackResp.body) as List<dynamic>;
+        if (kDebugMode) print('getCartItemCountForUser: fallback count=${items.length}');
+        return items.length;
+      } else {
+        if (kDebugMode) print('getCartItemCountForUser: fallback request failed ${fallbackResp.statusCode}');
+      }
+
+      return 0;
+    } catch (e, st) {
+      if (kDebugMode) {
+        print('getCartItemCountForUser exception: $e');
+        print(st);
+      }
+      return 0;
+    }
+  }
 }
 
 // helper top-level เพื่อใช้ compute

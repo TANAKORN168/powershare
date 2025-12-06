@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:powershare/services/session.dart';
 import 'package:powershare/services/apiServices.dart';
+import 'package:powershare/mainLayout.dart';
 
 class ProductDetailPage extends StatefulWidget {
   final String? productId; // new, optional
@@ -242,6 +243,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                             if (ok) {
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('เพิ่มลงตะกร้าแล้ว')));
                               setState(() {});
+                              // รีเฟรช badge ทันทีที่ MainLayout
+                              MainLayout.of(context)?.refreshCartCount();
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ไม่สามารถเพิ่มลงตะกร้าได้')));
                             }

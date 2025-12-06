@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:marquee/marquee.dart';
 import 'package:powershare/services/apiServices.dart';
 import 'package:powershare/pages/productDetailPage.dart';
@@ -29,6 +30,8 @@ class _HomePageState extends State<HomePage> {
   List<Map<String, dynamic>> _recommendedItems = [];
   bool _loadingRecommended = true;
 
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
@@ -36,6 +39,20 @@ class _HomePageState extends State<HomePage> {
     _loadPopular();
     _loadRecommended();
     _loadUserLikes();
+
+    // เริ่ม polling เบา ๆ เพื่อรีเฟรชรายการสินค้าที่แสดง
+    _refreshTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+      if (mounted) {
+        _loadPopular();
+        _loadRecommended();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadUserLikes() async {
@@ -190,9 +207,11 @@ class _HomePageState extends State<HomePage> {
       ),
     );
 
-    // เมื่อกลับมาจากหน้า detail ให้รีโหลดสถานะ like ของ user จาก DB
+    // เมื่อกลับมาจากหน้า detail -> รีโหลด likes + รายการสินค้า
     if (!mounted) return;
     _loadUserLikes();
+    _loadRecommended();
+    _loadPopular();
   }
 
   Widget _buildImageWidget(String image, {double size = 60}) {
