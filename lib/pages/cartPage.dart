@@ -112,7 +112,6 @@ class _CartPageState extends State<CartPage> {
                       padding: EdgeInsets.symmetric(vertical: 14),
                     ),
                     onPressed: () {
-                      // TODO: เปิดหน้า QR หรือ popup
                       showDialog(
                         context: context,
                         builder: (_) => AlertDialog(

@@ -42,7 +42,6 @@ class _ProductPageState extends State<ProductPage> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('ไปยังหน้ารายละเอียด: $itemName')));
-    // TODO: เปลี่ยนไปหน้า detail จริงในอนาคต
   }
 
   @override

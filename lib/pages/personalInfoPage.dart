@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:powershare/mainLayout.dart';
+import 'package:powershare/services/session.dart';
 
 class PersonalInfoPage extends StatelessWidget {
   const PersonalInfoPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final String name = 'คุณสมชาย ใจดี';
-    final String email = 'somchai@email.com';
-    final String phone = '081-234-5678';
-    final String address = '123/45 หมู่ 6 แขวงบางนา เขตบางนา กรุงเทพฯ 10260';
+    // ดึงข้อมูลจาก session แทนค่าคงที่
+    final user = Session.instance.user ?? <String, dynamic>{};
+    final String name = '${(user['name'] ?? '').toString().trim()} ${(user['surname'] ?? '').toString().trim()}'.trim();
+    final String idCard = (user['id_card_number'] ?? user['citizen_id  '] ?? '').toString();
+    final String email = (user['email'] ?? user['email_address'] ?? '').toString();
+    final String phone = (user['phone_number'] ?? user['tel'] ?? user['mobile'] ?? '').toString();
+    final String address = '${(user['address'] ?? '').toString().trim()} ${(user['subdistrict'] ?? '').toString().trim()} ${(user['district'] ?? '').toString().trim()} ${(user['province'] ?? '').toString().trim()} ${(user['postalCode'] ?? '').toString().trim()}'.trim();
+    final String avatarPath = (user['face_image_path'] ?? user['face_image'] ?? '').toString();
+    final ImageProvider avatarProvider = avatarPath.isNotEmpty
+        ? NetworkImage(avatarPath)
+        : const AssetImage('assets/images/avatar.png');
 
     return Scaffold(
       appBar: AppBar(
@@ -19,10 +27,15 @@ class PersonalInfoPage extends StatelessWidget {
         leading: IconButton(
           icon: Icon(Icons.arrow_back),
           onPressed: () {
+            final currentUser = Session.instance.user;
+            final isAdmin = currentUser != null &&
+                (((currentUser['role'] as String?) ?? '').toLowerCase() == 'admin');
+
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
-                builder: (context) => MainLayout(currentIndex: 5),
+                // ใช้ชื่อหน้าแทนเลข index
+                builder: (context) => MainLayout(currentIndex: MainLayout.tabIndex('profile', isAdmin: isAdmin)),
               ),
             );
           },
@@ -34,39 +47,19 @@ class PersonalInfoPage extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 50,
-              backgroundImage: AssetImage('assets/images/avatar.png'),
+              backgroundImage: avatarProvider,
             ),
             SizedBox(height: 16),
             Text(
-              name,
+              name.isNotEmpty ? name : 'ผู้ใช้',
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 32),
 
+            _buildInfoTile('เลขประจำตัวประชาชน', idCard),
             _buildInfoTile('อีเมล', email),
             _buildInfoTile('เบอร์โทรศัพท์', phone),
             _buildInfoTile('ที่อยู่', address),
-
-            Spacer(),
-
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('ฟีเจอร์ยังไม่เปิดใช้งาน')),
-                  );
-                },
-                icon: Icon(Icons.edit),
-                label: Text('แก้ไขข้อมูล'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFF3ABDC5),
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(vertical: 14),
-                  textStyle: TextStyle(fontSize: 16),
-                ),
-              ),
-            ),
           ],
         ),
       ),

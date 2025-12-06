@@ -2,12 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:powershare/loginPage.dart';
 import 'package:powershare/mainLayout.dart';
 import 'package:powershare/pages/personalInfoPage.dart';
+import 'package:powershare/services/session.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final user = Session.instance.user ?? <String, dynamic>{};
+    // ใช้ฟิลด์ nam + surname เป็นชื่อแสดง
+    final displayName = '${(user['name'] ?? '').toString().trim()} ${(user['surname'] ?? '').toString().trim()}'
+        .trim();
+
+    final email = (user['email'] ?? user['email_address'] ?? '').toString();
+    // ดึง path รูปจาก face_image_path เป็นหลัก (fallback ไปยังอื่น ๆ ถ้าไม่มี)
+    final avatarUrl = (user['face_image_path'] ?? user['face_image'] ?? user['profile_image'] ?? user['avatar'] ?? '')
+        .toString();
+    final ImageProvider avatarProvider = avatarUrl.isNotEmpty
+        ? NetworkImage(avatarUrl)
+        : const AssetImage('assets/images/avatar.png');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -36,19 +50,18 @@ class ProfilePage extends StatelessWidget {
               CircleAvatar(
                 radius: 50,
                 backgroundColor: Colors.grey[300],
-                backgroundImage: AssetImage(
-                  'assets/images/avatar.png',
-                ), // เปลี่ยนเป็นรูปจริง
+                backgroundImage: avatarProvider,
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
               Text(
-                'สมชาย ใจดี', // ชื่อผู้ใช้
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                displayName.isNotEmpty ? displayName : 'ผู้ใช้',
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              Text(
-                'someone@email.com', // อีเมลหรือเบอร์
-                style: TextStyle(color: Colors.grey[700]),
-              ),
+              if (email.isNotEmpty)
+                Text(
+                  email,
+                  style: TextStyle(color: Colors.grey[700]),
+                ),
             ],
           ),
         ),
@@ -61,7 +74,7 @@ class ProfilePage extends StatelessWidget {
           title: Text('ข้อมูลส่วนตัว'),
           trailing: Icon(Icons.arrow_forward_ios, size: 16),
           onTap: () {
-            Navigator.pushReplacement(
+            Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => PersonalInfoPage()),
             );
@@ -105,6 +118,10 @@ class ProfilePage extends StatelessWidget {
                   ),
                   ElevatedButton(
                     onPressed: () {
+                      // ล้าง session (ถ้ามี) ก่อนออก
+                      try {
+                        Session.instance.clear();
+                      } catch (_) {}
                       Navigator.pushAndRemoveUntil(
                         context,
                         MaterialPageRoute(builder: (context) => LoginPage()),

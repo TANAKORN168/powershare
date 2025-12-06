@@ -1,11 +1,8 @@
 import 'dart:convert';
 import 'package:dropdown_search/dropdown_search.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'package:intl/intl.dart';
 import 'package:powershare/models/singupModel.dart';
 import 'package:powershare/services/apiServices.dart';
 import 'package:powershare/services/emailServices.dart';
@@ -16,7 +13,6 @@ import 'package:powershare/widgets/passwordWidget.dart';
 import 'package:powershare/widgets/redirectTextButtonWidget.dart';
 import 'package:powershare/widgets/textFieldWidget.dart';
 import '../loginPage.dart';
-import 'package:image/image.dart' as img;
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -209,16 +205,18 @@ class RegisterPageState extends State<RegisterPage> {
           setState(() {
             _selectedDistrict = value;
 
-            // หาและตั้งค่า รหัสไปรษณีย์
+            // หา record ที่ถูกต้องจาก JSON
             final selected = _addressData.firstWhere(
               (e) =>
                   e['provinceNameTh'] == _selectedProvince &&
                   e['districtNameTh'] == _selectedAmphure &&
                   e['subdistrictNameTh'] == value,
             );
-            _subdistrictController.text = selected['provinceNameTh'].toString();
+
+            // แก้ตรงนี้ให้ตรงกัน: subdistrict <- subdistrictNameTh, province <- provinceNameTh
+            _subdistrictController.text = selected['subdistrictNameTh'].toString();
             _districtController.text = selected['districtNameTh'].toString();
-            _provinceController.text = selected['subdistrictNameTh'].toString();
+            _provinceController.text = selected['provinceNameTh'].toString();
             _postalCodeController.text = selected['postalCode'].toString();
           });
         },
@@ -467,6 +465,18 @@ class RegisterPageState extends State<RegisterPage> {
 
                             await Future.delayed(Duration(milliseconds: 100));
 
+                            // ตรวจสอบ checkbox ก่อน validate อื่นๆ
+                            if (!_acceptTerms) {
+                              Navigator.of(context, rootNavigator: true).pop(); // ปิด loading
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('กรุณายอมรับเงื่อนไขก่อนดำเนินการต่อ'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
                             String validatetionMessage = '';
                             validatetionMessage =
                                 TextFieldValidate.validatePassword(
@@ -501,6 +511,7 @@ class RegisterPageState extends State<RegisterPage> {
                                 );
 
                             if (validatetionMessage != '') {
+                              Navigator.of(context, rootNavigator: true).pop(); // ปิด loading
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(validatetionMessage),
@@ -510,70 +521,65 @@ class RegisterPageState extends State<RegisterPage> {
                               return;
                             }
 
-                            if (_acceptTerms) {
-                              final signupModel = SignupModel(
-                                name: _nameController.text.trim(),
-                                surname: _surnameController.text.trim(),
-                                birthDate: _birthDateController.text.trim(),
-                                phoneNumber: _phoneController.text.trim(),
-                                email: _emailController.text.trim(),
-                                password: _passwordController.text.trim(),
-                                idCardImagePath:
-                                    await ApiServices.uploadUserFiles(
-                                      _idCardImage!,
-                                    ),
-                                faceImagePath:
-                                    await ApiServices.uploadUserFiles(
-                                      _faceImage!,
-                                    ),
-                                idCardNumber: _idCardNumberController.text
-                                    .trim(),
-                                address: _addressController.text.trim(),
-                                subdistrict: _subdistrictController.text.trim(),
-                                district: _districtController.text.trim(),
-                                province: _provinceController.text.trim(),
-                                postalCode: _postalCodeController.text.trim(),
-                                avatarUrl: "",
+                            final signupModel = SignupModel(
+                              name: _nameController.text.trim(),
+                              surname: _surnameController.text.trim(),
+                              birthDate: _birthDateController.text.trim(),
+                              phoneNumber: _phoneController.text.trim(),
+                              email: _emailController.text.trim(),
+                              password: _passwordController.text.trim(),
+                              idCardImagePath:
+                                  await ApiServices.uploadUserFiles(
+                                    _idCardImage!,
+                                  ),
+                              faceImagePath:
+                                  await ApiServices.uploadUserFiles(
+                                    _faceImage!,
+                                  ),
+                              idCardNumber: _idCardNumberController.text
+                                  .trim(),
+                              address: _addressController.text.trim(),
+                              subdistrict: _subdistrictController.text.trim(),
+                              district: _districtController.text.trim(),
+                              province: _provinceController.text.trim(),
+                              postalCode: _postalCodeController.text.trim(),
+                              avatarUrl: "",
+                            );
+                            var res = await ApiServices.signup(signupModel);
+
+                            Navigator.of(context, rootNavigator: true).pop();
+
+                            if (res.responseCode == 'SUCCESS') {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(res.responseMessage),
+                                  backgroundColor: Colors.green,
+                                ),
                               );
-                              var res = await ApiServices.signup(signupModel);
 
-                              Navigator.of(context, rootNavigator: true).pop();
+                              // แทนที่ค่าจริงใน HTML template
+                              final htmlContent = htmlRegisterSucess
+                                  .replaceAll('{{customer_name}}', '${_nameController.text.trim()} ${_surnameController.text.trim()}')
+                                  .replaceAll('{{username}}', _emailController.text.trim())
+                                  .replaceAll('{{password}}', _passwordController.text.trim());
 
-                              if (res.responseCode == 'SUCCESS') {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(res.responseMessage),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
+                              // ส่งอีเมลยืนยันการสมัครสมาชิก
+                              EmailServices.sendEmailViaEdgeFunction(
+                                to: _emailController.text.trim(),
+                                subject: 'ยินดีต้อนรับสู่ PowerShare!',
+                                html: htmlContent,
+                              );
 
-                                //ส่ง อีเมลยืนยันการสมัครสมาชิก
-                                EmailServices.sendEmailViaEdgeFunction(
-                                  to: 'jack.buffer@gmail.com',
-                                  subject: 'ยินดีต้อนรับสู่ PowerShare!',
-                                  html: htmlRegisterSucess,
-                                );
-
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => LoginPage(),
-                                  ),
-                                );
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(res.responseMessage),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => LoginPage(),
+                                ),
+                              );
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text(
-                                    'กรุณายอมรับเงื่อนไขก่อนดำเนินการต่อ',
-                                  ),
+                                  content: Text(res.responseMessage),
                                   backgroundColor: Colors.red,
                                 ),
                               );
