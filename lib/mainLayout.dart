@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:powershare/loginPage.dart';
 import 'package:powershare/pages/cartPage.dart';
 import 'package:powershare/pages/profilePage.dart';
 import 'package:powershare/pages/savedProductsPage.dart';
@@ -90,6 +91,8 @@ class _MainLayoutState extends State<MainLayout> {
     _cartTimer = Timer.periodic(const Duration(seconds: 8), (_) {
       _loadCartCount();
     });
+
+    _checkTokenAndLoadData();
   }
 
   @override
@@ -211,6 +214,24 @@ class _MainLayoutState extends State<MainLayout> {
     } catch (e) {
       if (kDebugMode) print('loadCartCount error: $e');
     }
+  }
+
+  Future<void> _checkTokenAndLoadData() async {
+    final tokenValid = await ApiServices.checkAndRefreshToken();
+    
+    if (!tokenValid) {
+      // Token หมดอายุ - redirect ไป login
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+        );
+      }
+      return;
+    }
+    
+    // Token ยังใช้ได้ - load ข้อมูลตามปกติ
+    _loadCartCount();
   }
 
   // ให้เรียกแบบ: MainLayout.of(context)?.refreshCartCount();

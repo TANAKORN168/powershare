@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'package:marquee/marquee.dart';
+import 'package:powershare/loginPage.dart';
 import 'package:powershare/services/apiServices.dart';
 import 'package:powershare/pages/productDetailPage.dart';
+import 'package:powershare/services/productNotifier.dart';
 import 'package:powershare/services/session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:powershare/helps/formatHelper.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -30,29 +33,41 @@ class _HomePageState extends State<HomePage> {
   List<Map<String, dynamic>> _recommendedItems = [];
   bool _loadingRecommended = true;
 
-  Timer? _refreshTimer;
-
   @override
   void initState() {
     super.initState();
+    _checkTokenAndLoadData();
+    ProductNotifier.instance.addListener(_onProductChanged);
+  }
+
+  Future<void> _checkTokenAndLoadData() async {
+    final tokenValid = await ApiServices.checkAndRefreshToken();
+    
+    if (!tokenValid) {
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+        );
+      }
+      return;
+    }
+    
     _loadPromotions();
     _loadPopular();
     _loadRecommended();
     _loadUserLikes();
-
-    // เริ่ม polling เบา ๆ เพื่อรีเฟรชรายการสินค้าที่แสดง
-    _refreshTimer = Timer.periodic(const Duration(seconds: 12), (_) {
-      if (mounted) {
-        _loadPopular();
-        _loadRecommended();
-      }
-    });
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
+    ProductNotifier.instance.removeListener(_onProductChanged);
     super.dispose();
+  }
+
+  void _onProductChanged() {
+    _loadRecommended();
+    _loadPopular();
   }
 
   Future<void> _loadUserLikes() async {
@@ -207,7 +222,6 @@ class _HomePageState extends State<HomePage> {
       ),
     );
 
-    // เมื่อกลับมาจากหน้า detail -> รีโหลด likes + รายการสินค้า
     if (!mounted) return;
     _loadUserLikes();
     _loadRecommended();
@@ -253,7 +267,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ฟอร์แมตราคาเป็นทศนิยม 2 ตำแหน่ง และต่อด้วย "/วัน"
+  // แทนที่ฟังก์ชัน _formatPrice เดิม (บรรทัด ~235)
   String _formatPrice(dynamic priceVal) {
     if (priceVal == null) return '';
     double? value;
@@ -263,11 +277,10 @@ class _HomePageState extends State<HomePage> {
       value = double.tryParse(priceVal.toString());
     }
     if (value == null) {
-      // ถ้าไม่สามารถแปลงเป็นตัวเลขได้ ให้คืนค่าตามเดิม (string)
       final s = priceVal.toString();
       return s.isNotEmpty ? '$s/วัน' : '';
     }
-    return '฿${value.toStringAsFixed(2)}/วัน';
+    return FormatHelper.formatDailyPrice(value);
   }
 
   @override
@@ -296,7 +309,6 @@ class _HomePageState extends State<HomePage> {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemBuilder: (context, index) {
                         final item = _popularItems[index];
-                        final productId = (item['id'] ?? '').toString();
                         final name = (item['name'] ?? 'ไม่มีชื่อ').toString();
                         final image = (item['image'] ?? '').toString();
 

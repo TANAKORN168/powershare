@@ -290,7 +290,7 @@ class _UserApprovalDetailPageState extends State<UserApprovalDetailPage> {
                 child: Column(
                   children: [
                     DropdownButtonFormField<String>(
-                      value: _selectedRole,
+                      initialValue: _selectedRole,
                       decoration: InputDecoration(
                         labelText: 'Role',
                         filled: true,

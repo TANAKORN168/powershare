@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:powershare/mainLayout.dart';
 import 'package:powershare/services/apiServices.dart';
 import 'package:powershare/services/session.dart';
+import 'package:powershare/helps/formatHelper.dart';
+import 'package:http/http.dart' as http; // เพิ่ม
+import 'dart:convert'; // เพิ่ม
 
 class CartPage extends StatefulWidget {
   const CartPage({super.key});
@@ -15,11 +19,30 @@ class _CartPageState extends State<CartPage> {
   bool _loading = true;
   String? _userId;
 
+  // แก้ไขส่วนแสดง QR dialog ใน cartPage.dart
+
+  // เพิ่ม state variable
+  Map<String, dynamic>? _paymentSettings;
+
+  // เพิ่ม method โหลดการตั้งค่า
+  Future<void> _loadPaymentSettings() async {
+    try {
+      final Map<String, dynamic>? settings = await ApiServices.getPaymentSettings(); // ← เพิ่ม type
+      if (kDebugMode) print('🔵 Payment settings loaded: $settings');
+      if (mounted && settings != null) {
+        setState(() => _paymentSettings = settings);
+      }
+    } catch (e) {
+      if (kDebugMode) print('❌ loadPaymentSettings error: $e');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _userId = Session.instance.user?['id']?.toString();
     _loadCartItems();
+    _loadPaymentSettings(); // ← เพิ่มบรรทัดนี้
   }
 
   Future<void> _loadCartItems() async {
@@ -39,7 +62,10 @@ class _CartPageState extends State<CartPage> {
         return;
       }
 
-      if (kDebugMode) print("CartPage: loading cart for userId='$_userId' tokenLen=${Session.instance.accessToken?.length ?? 0}");
+      if (kDebugMode)
+        print(
+          "CartPage: loading cart for userId='$_userId' tokenLen=${Session.instance.accessToken?.length ?? 0}",
+        );
 
       final items = await ApiServices.getCartItemsForUser(_userId!);
 
@@ -50,10 +76,14 @@ class _CartPageState extends State<CartPage> {
           cartItems = items.map((it) {
             try {
               final priceRaw = it['price'];
-              final price = (priceRaw is int)
-                  ? priceRaw
-                  : (priceRaw is double ? priceRaw.toInt() : int.tryParse(priceRaw?.toString() ?? '0') ?? 0);
+              final price = (priceRaw is num)
+                  ? priceRaw.toDouble()
+                  : double.tryParse(priceRaw?.toString() ?? '0') ?? 0.0;
               final image = (it['image'] ?? '').toString();
+              final rentalDays = (it['rental_days'] is int)
+                  ? it['rental_days'] as int
+                  : int.tryParse(it['rental_days']?.toString() ?? '1') ?? 1;
+
               return {
                 'name': it['name'] ?? 'สินค้า',
                 'price': price,
@@ -62,17 +92,23 @@ class _CartPageState extends State<CartPage> {
                 'product_id': it['product_id'],
                 'item_id': it['item_id'] ?? it['id']?.toString() ?? '',
                 'cart_id': it['cart_id'] ?? '',
+                'rent_start': it['rent_start'],
+                'rent_end': it['rent_end'],
+                'rental_days': rentalDays,
               };
             } catch (e) {
               if (kDebugMode) print('CartPage: failed to map item $it -> $e');
               return {
                 'name': it['name'] ?? 'สินค้า',
-                'price': 0,
+                'price': 0.0,
                 'image': null,
                 'quantity': it['quantity'] ?? 1,
                 'product_id': it['product_id'],
                 'item_id': it['item_id'] ?? it['id']?.toString() ?? '',
                 'cart_id': it['cart_id'] ?? '',
+                'rent_start': it['rent_start'],
+                'rent_end': it['rent_end'],
+                'rental_days': 1,
               };
             }
           }).toList();
@@ -102,18 +138,23 @@ class _CartPageState extends State<CartPage> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('ลบรายการ'),
+        title: const Text('ลบรายการ'),
         content: Text('คุณต้องการลบ "${item['name']}" ออกจากตะกร้าหรือไม่?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('ยกเลิก')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: Text('ลบ', style: TextStyle(color: Colors.red))),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('ยกเลิก'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('ลบ', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
 
     if (confirm != true) return;
 
-    // Optimistic UI: show progress
     if (mounted) {
       setState(() {
         _loading = true;
@@ -121,7 +162,11 @@ class _CartPageState extends State<CartPage> {
     }
 
     try {
-      final ok = await ApiServices.deleteCartItem(itemId ?? '', productId: productId, cartId: cartId);
+      final ok = await ApiServices.deleteCartItem(
+        itemId ?? '',
+        productId: productId,
+        cartId: cartId,
+      );
       if (ok) {
         if (mounted) {
           setState(() {
@@ -129,28 +174,226 @@ class _CartPageState extends State<CartPage> {
             _loading = false;
           });
         }
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ลบรายการเรียบร้อยแล้ว')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('ลบรายการเรียบร้อยแล้ว')));
       } else {
         if (mounted) {
           setState(() => _loading = false);
         }
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ลบรายการไม่สำเร็จ')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('ลบรายการไม่สำเร็จ')));
       }
     } catch (e) {
       if (kDebugMode) print('removeItem error: $e');
       if (mounted) {
         setState(() => _loading = false);
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาด')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('เกิดข้อผิดพลาด')));
     }
   }
 
-  double get total =>
-      cartItems.fold(0.0, (sum, item) {
-        final priceRaw = item['price'];
-        final p = (priceRaw is num) ? priceRaw.toDouble() : double.tryParse(priceRaw?.toString() ?? '0') ?? 0.0;
-        return sum + p;
-      });
+  Future<void> _editItem(int index) async {
+    final item = cartItems[index];
+    final itemId = item['item_id']?.toString();
+    
+    if (itemId == null || itemId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ไม่พบรหัสรายการ')),
+      );
+      return;
+    }
+
+    // Parse วันที่เดิม
+    DateTime? currentStart;
+    DateTime? currentEnd;
+    
+    try {
+      if (item['rent_start'] != null) {
+        currentStart = DateTime.parse(item['rent_start'].toString());
+      }
+      if (item['rent_end'] != null) {
+        currentEnd = DateTime.parse(item['rent_end'].toString());
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error parsing dates: $e');
+    }
+
+    // เปิด dialog เลือกวันที่ใหม่
+    final now = DateTime.now();
+    final minStartDate = now.add(const Duration(days: 3));
+    
+    final result = await showDateRangePicker(
+      context: context,
+      firstDate: minStartDate,
+      lastDate: now.add(const Duration(days: 365)),
+      initialDateRange: currentStart != null && currentEnd != null
+          ? DateTimeRange(start: currentStart, end: currentEnd)
+          : null,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF3ABDC5),
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (result == null) return; // ยกเลิก
+
+    // คำนวณจำนวนวัน
+    final rentalDays = result.end.difference(result.start).inDays + 1;
+
+    // อัปเดตข้อมูลไปยัง API
+    try {
+      final updateUrl = Uri.parse(
+        '${ApiConfig.baseUrl}/rest/v1/cart_items?id=eq.$itemId',
+      );
+      
+      final token = Session.instance.accessToken ?? ApiConfig.apiKey;
+      final headers = {
+        'apikey': ApiConfig.apiKey,
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      };
+
+      final body = {
+        'rent_start': result.start.toIso8601String().split('T')[0],
+        'rent_end': result.end.toIso8601String().split('T')[0],
+        'rental_days': rentalDays,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      final resp = await http.patch(
+        updateUrl,
+        headers: headers,
+        body: jsonEncode(body),
+      );
+
+      if (resp.statusCode == 200 || resp.statusCode == 204) {
+        // อัปเดต cart total
+        final cartId = item['cart_id']?.toString();
+        if (cartId != null && cartId.isNotEmpty) {
+          await _updateCartTotal(cartId);
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('แก้ไขวันที่เรียบร้อย'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          _loadCartItems(); // โหลดข้อมูลใหม่
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('แก้ไขไม่สำเร็จ'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('editItem error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('เกิดข้อผิดพลาด: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _updateCartTotal(String cartId) async {
+    try {
+      final token = Session.instance.accessToken ?? ApiConfig.apiKey;
+      final headers = {
+        'apikey': ApiConfig.apiKey,
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      };
+
+      // ดึง cart_items ทั้งหมดของ cart นี้
+      final itemsUrl = Uri.parse(
+        '${ApiConfig.baseUrl}/rest/v1/cart_items?cart_id=eq.$cartId',
+      );
+      final itemsResp = await http.get(itemsUrl, headers: headers);
+      
+      if (itemsResp.statusCode == 200) {
+        final items = jsonDecode(itemsResp.body) as List<dynamic>;
+        double total = 0;
+        
+        for (var item in items) {
+          final unitPrice = (item['unit_price'] is num)
+              ? (item['unit_price'] as num).toDouble()
+              : double.tryParse(item['unit_price']?.toString() ?? '0') ?? 0.0;
+          final rentalDays = (item['rental_days'] is int)
+              ? item['rental_days'] as int
+              : int.tryParse(item['rental_days']?.toString() ?? '1') ?? 1;
+          total += unitPrice * rentalDays;
+        }
+
+        // อัปเดต total_amount
+        final cartUrl = Uri.parse(
+          '${ApiConfig.baseUrl}/rest/v1/carts?id=eq.$cartId',
+        );
+        final cartBody = {
+          'total_amount': total,
+          'updated_at': DateTime.now().toIso8601String(),
+        };
+        
+        await http.patch(cartUrl, headers: headers, body: jsonEncode(cartBody));
+      }
+    } catch (e) {
+      if (kDebugMode) print('updateCartTotal error: $e');
+    }
+  }
+
+  double get total => cartItems.fold(0.0, (sum, item) {
+    final priceRaw = item['price'];
+    final p = (priceRaw is num)
+        ? priceRaw.toDouble()
+        : double.tryParse(priceRaw?.toString() ?? '0') ?? 0.0;
+
+    // คำนวณจำนวนวันจาก rent_start และ rent_end ถ้ามี
+    int days = 1;
+    if (item['rent_start'] != null && item['rent_end'] != null) {
+      try {
+        final startDate = DateTime.parse(item['rent_start'].toString());
+        final endDate = DateTime.parse(item['rent_end'].toString());
+        days = endDate.difference(startDate).inDays + 1;
+      } catch (e) {
+        days = item['rental_days'] as int? ?? 1;
+      }
+    } else {
+      days = item['rental_days'] as int? ?? 1;
+    }
+
+    return sum + (p * days);
+  });
+
+  String _formatThaiDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return '';
+    try {
+      final date = DateTime.parse(dateStr);
+      return '${date.day}/${date.month}/${date.year + 543}';
+    } catch (e) {
+      return dateStr.split('T')[0]; // fallback: แสดงแค่วันที่
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -159,9 +402,9 @@ class _CartPageState extends State<CartPage> {
         children: [
           Container(
             width: double.infinity,
-            color: Color(0xFF3ABDC5),
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Center(
+            color: const Color(0xFF3ABDC5),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: const Center(
               child: Text(
                 'ตะกร้าสินค้า',
                 style: TextStyle(
@@ -174,113 +417,342 @@ class _CartPageState extends State<CartPage> {
           ),
           Expanded(
             child: _loading
-                ? Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator())
                 : cartItems.isEmpty
-                    ? Center(child: Text('ยังไม่มีสินค้าในตะกร้า'))
-                    : ListView.builder(
-                        padding: EdgeInsets.all(16),
-                        itemCount: cartItems.length,
-                        itemBuilder: (context, index) {
-                          final item = cartItems[index];
-                          final image = item['image'] as String?;
-                          return Card(
-                            margin: EdgeInsets.only(bottom: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                ? const Center(child: Text('ยังไม่มีสินค้าในตะกร้า'))
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: cartItems.length,
+                    itemBuilder: (context, index) {
+                      final item = cartItems[index];
+                      final image = item['image'] as String?;
+                      final dailyPrice = (item['price'] is num)
+                          ? (item['price'] as num).toDouble()
+                          : double.tryParse(item['price']?.toString() ?? '0') ??
+                                0.0;
+
+                      final rentStart = item['rent_start'] as String?;
+                      final rentEnd = item['rent_end'] as String?;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.1),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
                             ),
-                            child: ListTile(
-                              leading: image != null && image.isNotEmpty
-                                  ? (image.startsWith('http')
-                                      ? Image.network(image, width: 60, fit: BoxFit.cover)
-                                      : Image.asset(image, width: 60, fit: BoxFit.cover))
-                                  : Container(
-                                      width: 60,
-                                      height: 60,
-                                      color: Colors.grey.shade200,
-                                      child: Icon(Icons.image_not_supported),
-                                    ),
-                              title: Text(item['name']),
-                              subtitle: Text('฿${((item['price'] is num) ? (item['price'] as num).toDouble() : double.tryParse(item['price']?.toString() ?? '0') ?? 0.0).toStringAsFixed(2)}/วัน'),
-                              trailing: IconButton(
-                                icon: Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _removeItem(index),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            if (image != null && image.isNotEmpty) ...[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(
+                                  image,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
-          ),
-          Divider(thickness: 1),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'รวมทั้งหมด:',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      '฿${total.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: Color(0xFF3ABDC5),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    icon: Icon(Icons.qr_code),
-                    label: Text(
-                      'ชำระเงินด้วย QR Code',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Color(0xFF3ABDC5),
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => AlertDialog(
-                          title: const Text('QR Code ชำระเงิน'),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text('ยอดชำระทั้งหมด', style: TextStyle(fontSize: 16)),
-                              const SizedBox(height: 8),
-                              Text(
-                                '฿${total.toStringAsFixed(2)}',
-                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF3ABDC5)),
-                              ),
-                              const SizedBox(height: 14),
-                              const Icon(Icons.qr_code_2, size: 100),
+                              const SizedBox(width: 16),
                             ],
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('ปิด'),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item['name'] ?? 'สินค้า',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Builder(
+                                    builder: (context) {
+                                      // คำนวณจำนวนวันจาก rent_start และ rent_end ถ้ามี
+                                      int days = 1;
+                                      final rentStart = item['rent_start'];
+                                      final rentEnd = item['rent_end'];
+                                      
+                                      if (rentStart != null && rentEnd != null) {
+                                        try {
+                                          final startDate = DateTime.parse(rentStart.toString());
+                                          final endDate = DateTime.parse(rentEnd.toString());
+                                          days = endDate.difference(startDate).inDays + 1;
+                                        } catch (e) {
+                                          days = item['rental_days'] as int? ?? 1;
+                                        }
+                                      } else {
+                                        days = item['rental_days'] as int? ?? 1;
+                                      }
+                                      
+                                      final itemTotal = dailyPrice * days;
+                                      
+                                      return Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            '${FormatHelper.formatPrice(dailyPrice)}/วัน × $days วัน',
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.black54,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'รวม: ${FormatHelper.formatPrice(itemTotal)}',
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF3ABDC5),
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(height: 8),
+                                  if (rentStart != null && rentEnd != null) ...[
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.calendar_today,
+                                          size: 16,
+                                          color: Colors.black54,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '${_formatThaiDate(rentStart)} - ${_formatThaiDate(rentEnd)}',
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.black54,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                  ],
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          onPressed: () => _editItem(index), // เพิ่ม logic ตรงนี้
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFF3ABDC5),
+                                            padding: const EdgeInsets.symmetric(vertical: 12),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'แก้ไข',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      ElevatedButton(
+                                        onPressed: () => _removeItem(index),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 12,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          'ลบ',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
                       );
                     },
                   ),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF3ABDC5), Color(0xFF2A9DA5)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-              ],
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF3ABDC5).withValues(alpha: 0.4),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: cartItems.isEmpty ? null : () async {
+                    if (_paymentSettings == null) {
+                      await _loadPaymentSettings();
+                    }
+
+                    final qrImageUrl = _paymentSettings?['qr_image_url']?.toString();
+                    final promptpayName = _paymentSettings?['promptpay_name']?.toString() ?? 'ระบบเช่า';
+                    final promptpayNumber = _paymentSettings?['promptpay_number']?.toString();
+
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        title: const Text('QR Code ชำระเงิน', textAlign: TextAlign.center),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('ยอดชำระทั้งหมด', style: TextStyle(fontSize: 16)),
+                            const SizedBox(height: 8),
+                            Text(
+                              FormatHelper.formatPrice(total),
+                              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF3ABDC5)),
+                            ),
+                            const SizedBox(height: 20),
+                            
+                            // แสดง QR Code จริงจาก database
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                border: Border.all(color: Colors.grey.shade300, width: 2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: qrImageUrl != null && qrImageUrl.isNotEmpty
+                                  ? Image.network(
+                                      qrImageUrl,
+                                      width: 200,
+                                      height: 200,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.qr_code_2,
+                                        size: 120,
+                                        color: Color(0xFF3ABDC5),
+                                      ),
+                                    )
+                                  : const Icon(Icons.qr_code_2, size: 120, color: Color(0xFF3ABDC5)),
+                            ),
+                            
+                            const SizedBox(height: 16),
+                            Text(
+                              promptpayName,
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            if (promptpayNumber != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'พร้อมเพย์: $promptpayNumber',
+                                style: const TextStyle(fontSize: 14, color: Colors.black54),
+                              ),
+                            ],
+                            const SizedBox(height: 20),
+                            const Text(
+                              'กรุณาสแกน QR Code เพื่อชำระเงิน',
+                              style: TextStyle(fontSize: 14, color: Colors.black54),
+                            ),
+                          ],
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('ยกเลิก', style: TextStyle(color: Colors.grey)),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3ABDC5),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            ),
+                            child: const Text('ยืนยันการชำระเงิน', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirmed == true && cartItems.isNotEmpty) {
+                      // เปลี่ยนสถานะ cart เป็น 'paid'
+                      final cartId = cartItems.first['cart_id'];
+                      if (cartId != null && cartId.toString().isNotEmpty) {
+                        try {
+                          final success = await ApiServices.updateCartStatus(cartId.toString(), 'paid');
+                          if (success) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('ชำระเงินเรียบร้อย'), backgroundColor: Colors.green),
+                            );
+                            _loadCartItems();
+                            
+                            // ✅ เพิ่มบรรทัดนี้เพื่ออัปเดต badge ใน MainLayout
+                            MainLayout.of(context)?.refreshCartCount();
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('ชำระเงินไม่สำเร็จ'), backgroundColor: Colors.red),
+                            );
+                          }
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red),
+                          );
+                        }
+                      }
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.payment, color: Colors.white, size: 24),
+                        const SizedBox(width: 12),
+                        Text(
+                          cartItems.isEmpty ? 'ตะกร้าว่าง' : 'ชำระเงิน ${FormatHelper.formatPrice(total)}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
+          const SizedBox(height: 32),
         ],
       ),
     );

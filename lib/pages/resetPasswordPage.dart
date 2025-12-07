@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:powershare/services/apiServices.dart';
 import 'package:powershare/validates/textFieldValidate.dart';
 import 'package:powershare/widgets/buttonWidget.dart';
-import 'package:powershare/widgets/textFieldWidget.dart';
 import '../loginPage.dart';
 
 class ResetPasswordPage extends StatefulWidget {

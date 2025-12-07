@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:powershare/services/apiServices.dart';
 import 'package:powershare/services/session.dart';
 
@@ -55,40 +57,83 @@ class _CategoryPageState extends State<CategoryPage> {
     final controller = TextEditingController(text: category != null ? (category['name'] ?? '') : '');
     final descCtrl = TextEditingController(text: category != null ? (category['description'] ?? '') : '');
     bool isActiveLocal = (category != null) ? (category['is_active'] == true) : true;
+    File? pickedImage;
+    String? currentImageUrl = category?['image_url']?.toString();
 
     return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (BuildContext dialogContext) => StatefulBuilder(
-        builder: (BuildContext sbCtx, StateSetter setState) {
+        builder: (BuildContext sbCtx, StateSetter setDialogState) {
           return AlertDialog(
             title: Text(category != null ? 'แก้ไขหมวดหมู่' : 'เพิ่มหมวดหมู่'),
-            content: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: controller,
-                    decoration: const InputDecoration(labelText: 'ชื่อหมวดหมู่'),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณาใส่ชื่อหมวดหมู่' : null,
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: descCtrl,
-                    decoration: const InputDecoration(labelText: 'คำอธิบาย (ไม่บังคับ)'),
-                    maxLines: 2,
-                  ),
-                  const SizedBox(height: 8),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('ใช้งาน'),
-                    value: isActiveLocal,
-                    onChanged: (v) {
-                      setState(() => isActiveLocal = v ?? true);
-                    },
-                    controlAffinity: ListTileControlAffinity.leading,
-                  ),
-                ],
+            content: SingleChildScrollView(
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // แสดงรูปภาพ
+                    GestureDetector(
+                      onTap: () async {
+                        final picker = ImagePicker();
+                        final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+                        if (pickedFile != null) {
+                          setDialogState(() {
+                            pickedImage = File(pickedFile.path);
+                          });
+                        }
+                      },
+                      child: Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey),
+                        ),
+                        child: pickedImage != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.file(pickedImage!, fit: BoxFit.cover),
+                              )
+                            : currentImageUrl != null && currentImageUrl.isNotEmpty
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.network(
+                                      currentImageUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(Icons.image, size: 48),
+                                    ),
+                                  )
+                                : const Icon(Icons.add_photo_alternate, size: 48),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('แตะเพื่อเลือกรูป', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: controller,
+                      decoration: const InputDecoration(labelText: 'ชื่อหมวดหมู่'),
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณาใส่ชื่อหมวดหมู่' : null,
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: descCtrl,
+                      decoration: const InputDecoration(labelText: 'คำอธิบาย (ไม่บังคับ)'),
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 8),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('ใช้งาน'),
+                      value: isActiveLocal,
+                      onChanged: (v) {
+                        setDialogState(() => isActiveLocal = v ?? true);
+                      },
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                  ],
+                ),
               ),
             ),
             actions: [
@@ -96,37 +141,57 @@ class _CategoryPageState extends State<CategoryPage> {
               ElevatedButton(
                 onPressed: () async {
                   if (!_formKey.currentState!.validate()) return;
-                  Navigator.of(dialogContext).pop(); // ปิด dialog ก่อนทำงานเครือข่าย
+                  Navigator.of(dialogContext).pop();
 
-                  final user = Session.instance.user;
-                  final userId = user != null ? (user['id'] ?? user['user_id'] ?? user['uid']) : null;
+                  // แสดง loading
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (_) => const Center(child: CircularProgressIndicator()),
+                  );
 
                   try {
+                    String? uploadedImageUrl;
+
+                    // อัปโหลดรูปถ้ามี
+                    if (pickedImage != null) {
+                      uploadedImageUrl = await ApiServices.uploadUserFiles(
+                        pickedImage!,
+                        subfolder: 'categories',
+                      );
+                    }
+
+                    final user = Session.instance.user;
+                    final userId = user != null ? (user['id'] ?? user['user_id'] ?? user['uid']) : null;
+
                     if (category != null && category['id'] != null) {
                       // update
                       await ApiServices.updateCategory(
                         category['id'].toString(),
                         name: controller.text.trim(),
                         description: descCtrl.text.trim(),
+                        imageUrl: uploadedImageUrl ?? currentImageUrl,
                         isActive: isActiveLocal,
                         userUpdates: userId?.toString(),
                       );
-                      // รีโหลดรายการจาก server เพื่อให้ UI แสดงสถานะล่าสุดแน่นอน
-                      await _loadCategories();
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('แก้ไขหมวดหมู่เรียบร้อย')));
                     } else {
                       // create
                       await ApiServices.createCategory(
                         name: controller.text.trim(),
                         description: descCtrl.text.trim(),
+                        imageUrl: uploadedImageUrl,
                         isActive: isActiveLocal,
                         userCreated: userId?.toString(),
                       );
-                      // รีโหลดรายการ
-                      await _loadCategories();
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('เพิ่มหมวดหมู่เรียบร้อย')));
                     }
+
+                    Navigator.pop(context); // ปิด loading
+                    await _loadCategories();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(category != null ? 'แก้ไขหมวดหมู่เรียบร้อย' : 'เพิ่มหมวดหมู่เรียบร้อย')),
+                    );
                   } catch (e) {
+                    Navigator.pop(context); // ปิด loading
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาด: $e')));
                   }
                 },
@@ -180,6 +245,8 @@ class _CategoryPageState extends State<CategoryPage> {
           separatorBuilder: (_, __) => const SizedBox(height: 8),
           itemBuilder: (ctx, i) {
             final c = _categories[i];
+            final imageUrl = c['image_url']?.toString();
+
             return Dismissible(
               key: ValueKey(c['id'] ?? '$i'),
               direction: DismissDirection.endToStart,
@@ -209,6 +276,31 @@ class _CategoryPageState extends State<CategoryPage> {
               },
               child: Card(
                 child: ListTile(
+                  leading: imageUrl != null && imageUrl.isNotEmpty
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            imageUrl,
+                            width: 50,
+                            height: 50,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              width: 50,
+                              height: 50,
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.category),
+                            ),
+                          ),
+                        )
+                      : Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[300],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.category),
+                        ),
                   title: Text(c['name'] ?? ''),
                   subtitle: Builder(builder: (_) {
                     final desc = (c['description'] ?? '').toString();
@@ -228,7 +320,7 @@ class _CategoryPageState extends State<CategoryPage> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: statusColor.withOpacity(0.12),
+                            color: statusColor.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(

@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:path/path.dart' as path;
 import 'package:image_picker/image_picker.dart';
 import 'package:powershare/services/apiServices.dart';
 import 'package:powershare/services/session.dart';
@@ -30,7 +29,6 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
   List<Map<String, dynamic>> _categories = [];
   String? _selectedCategoryId;
   bool _loadingCategories = true;
-  String? _categoriesError;
 
   @override
   void initState() {
@@ -52,14 +50,12 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
   Future<void> _loadCategories() async {
     setState(() {
       _loadingCategories = true;
-      _categoriesError = null;
     });
     try {
       final list = await ApiServices.getCategories();
       _categories = list.map((e) => Map<String, dynamic>.from(e)).toList();
     } catch (e) {
       _categories = [];
-      _categoriesError = 'ไม่สามารถโหลดหมวดหมู่: $e';
     } finally {
       if (mounted) setState(() => _loadingCategories = false);
     }
@@ -100,7 +96,7 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
       if (_pickedImageFile != null) {
         // ใช้ฟังก์ชันเดียวกับหน้า register (uploadUserFiles) หรือเรียก ApiServices.uploadFile(...) ถ้าต้องการ path/custom bucket
         // เรียกด้วย named parameter 'subfolder'
-        imageUrl = await ApiServices.uploadUserFiles(_pickedImageFile!, subfolder: 'products');
+        imageUrl = await ApiServices.uploadProductFile(_pickedImageFile!);
         // หรือใช้ helper ที่เตรียมไว้:
         // imageUrl = await ApiServices.uploadProductFile(_pickedImageFile!);
       } else if (_imageCtrl.text.trim().isNotEmpty) {
@@ -110,12 +106,17 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
       final payload = {
         'name': _nameCtrl.text.trim(),
         'subtitle': _subtitleCtrl.text.trim(),
-        // ส่งชื่อ field ให้ตรงกับตาราง products
         'description': _descCtrl.text.trim(),
         'price': double.tryParse(_priceCtrl.text.trim()) ?? 0.0,
         'image': imageUrl ?? '',
         'category_id': _selectedCategoryId,
+        'last_status': widget.product == null ? 'Available' : (widget.product!['last_status'] ?? 'Available'),
       };
+
+      // ถ้าเป็นการสร้างใหม่ ให้ตั้ง last_status เป็น Available
+      if (widget.product == null) {
+        payload['last_status'] = 'Available';
+      }
 
       Map<String, dynamic> saved;
       final idRaw = widget.product?['id']?.toString();
@@ -358,7 +359,7 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
                     _loadingCategories
                         ? const SizedBox(height: 56, child: Center(child: CircularProgressIndicator()))
                         : DropdownButtonFormField<String>(
-                            value: _selectedCategoryId,
+                            initialValue: _selectedCategoryId,
                             decoration: _inputDecoration('หมวดหมู่'),
                             items: _categories
                                 .map((c) => DropdownMenuItem(
@@ -366,7 +367,11 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
                                       child: Text(c['name']?.toString() ?? ''),
                                     ))
                                 .toList(),
-                            onChanged: (v) => setState(() => _selectedCategoryId = v),
+                            onChanged: (v) {
+                              setState(() {
+                                _selectedCategoryId = v;
+                              });
+                            },
                             validator: (v) => (v == null) ? 'กรุณาเลือกหมวดหมู่' : null,
                           ),
                     const SizedBox(height: 20),
@@ -374,16 +379,16 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
                       onPressed: _save,
                       child: _saving
                           ? const SizedBox(
-                              width: 24,
-                              height: 24,
+                              width: 16,
+                              height: 16,
                               child: CircularProgressIndicator(
-                                strokeWidth: 3,
-                                valueColor: AlwaysStoppedAnimation(Colors.white),
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                strokeWidth: 2,
                               ),
                             )
                           : const Text('บันทึกข้อมูล'),
                       style: ElevatedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(50),
+                        minimumSize: const Size(double.infinity, 50),
                         backgroundColor: const Color(0xFF3ABDC5),
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
@@ -391,7 +396,20 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 10),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('ยกเลิก'),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 50),
+                        backgroundColor: Colors.grey.shade200,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
                   ],
                 ),
               ),

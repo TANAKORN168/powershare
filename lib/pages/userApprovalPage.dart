@@ -90,7 +90,6 @@ class _UserApprovalPageState extends State<UserApprovalPage> {
                         final u = _pendingUsers[i];
                         final name = (u['name'] as String?) ?? (u['fullName'] as String?) ?? 'ไม่มีชื่อ';
                         final email = (u['email'] as String?) ?? '-';
-                        final reqAt = u['requested_at'] ?? u['created_at'];
                         return Card(
                           child: ListTile(
                             leading: CircleAvatar(

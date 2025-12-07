@@ -3,6 +3,7 @@ import 'package:powershare/pages/PromotionPage.dart';
 import 'package:powershare/pages/categoryPage.dart';
 import 'package:powershare/pages/userApprovalPage.dart';
 import 'package:powershare/pages/addProductPage.dart';
+import 'package:powershare/pages/PaymentSettingsPage.dart';
 
 class AdminPage extends StatelessWidget {
   const AdminPage({super.key});
@@ -119,6 +120,18 @@ class AdminPage extends StatelessWidget {
                       ),
                     ),
 
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.payment, color: Color(0xFF3ABDC5)),
+                        title: const Text('ตั้งค่า QR ชำระเงิน'),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const PaymentSettingsPage()),
+                          );
+                        },
+                      ),
+                    ),
                   ],
                 ),
               ),

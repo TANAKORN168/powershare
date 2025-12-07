@@ -20,7 +20,6 @@ class _AddProductPageState extends State<AddProductPage> {
   List<Map<String, dynamic>> _categories = [];
   Map<String, String> _categoryMap = {};
   bool _loadingCategories = false;
-  String? _categoriesError;
 
   @override
   void initState() {
