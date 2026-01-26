@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:powershare/pages/forgotPasswordPage.dart';
 import 'package:powershare/mainLayout.dart';
 import 'package:powershare/services/apiServices.dart';
-import 'package:powershare/services/session.dart'; // <-- เพิ่มบรรทัดนี้
+import 'package:powershare/services/session.dart';
+import 'package:powershare/services/notificationService.dart';
 import 'package:powershare/validates/textFieldValidate.dart';
 import 'package:powershare/widgets/passwordWidget.dart';
 import 'package:powershare/widgets/redirectTextButtonWidget.dart';
@@ -33,26 +35,22 @@ class LoginPageState extends State<LoginPage> {
 
   Future<void> _handleLogin() async {
     // ตรวจ email ก่อน password
-    String validationMessage =
-        TextFieldValidate.validateEmail(_usernameController.text.trim());
+    String validationMessage = TextFieldValidate.validateEmail(
+      _usernameController.text.trim(),
+    );
     if (validationMessage != '') {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(validationMessage),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(validationMessage), backgroundColor: Colors.red),
       );
       return;
     }
 
-    validationMessage =
-        TextFieldValidate.validatePassword(_passwordController.text.trim());
+    validationMessage = TextFieldValidate.validatePassword(
+      _passwordController.text.trim(),
+    );
     if (validationMessage != '') {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(validationMessage),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(validationMessage), backgroundColor: Colors.red),
       );
       return;
     }
@@ -90,18 +88,33 @@ class LoginPageState extends State<LoginPage> {
         );
 
         if (matchedUser != null) {
-          Session.instance.setUser(Map<String, dynamic>.from(matchedUser),
-              token: res['access_token'] as String?);
-          // ถ้าต้องการเก็บลง SharedPreferences ให้เรียก
+          Session.instance.setUser(
+            Map<String, dynamic>.from(matchedUser),
+            token: res['access_token'] as String?,
+          );
           await Session.instance.saveToPrefs();
+
+          // --- ไม่ต้อง sync session กับ Supabase Auth แล้ว ---
+
+          // --- เพิ่มบันทึก FCM Token หลัง login ---
+          try {
+            final token = await NotificationService.getFcmToken();
+            if (token != null) {
+              await NotificationService.saveFcmToken(token);
+              if (kDebugMode) print('[FCM] saveFcmToken called after login');
+            } else {
+              if (kDebugMode)
+                print('[FCM] getFcmToken returned null after login');
+            }
+          } catch (e) {
+            if (kDebugMode) print('[FCM] saveFcmToken error after login: $e');
+          }
         }
 
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => MainLayout(),
-          ),
+          MaterialPageRoute(builder: (context) => MainLayout()),
         );
       }
     } catch (e) {
@@ -128,7 +141,9 @@ class LoginPageState extends State<LoginPage> {
               builder: (context, constraints) {
                 return SingleChildScrollView(
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
                     child: IntrinsicHeight(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -154,7 +169,9 @@ class LoginPageState extends State<LoginPage> {
                           // --- เปลี่ยนกลับไปใช้ CustomLoginButton แต่รองรับ loading (spinner บนปุ่ม) ---
                           // ใช้ Stack เพื่อวาง spinner กลางปุ่มเมื่อ _loading = true
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24.0,
+                            ),
                             child: Stack(
                               alignment: Alignment.center,
                               children: [
@@ -179,7 +196,10 @@ class LoginPageState extends State<LoginPage> {
                                         height: 20,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF3ABDC5)),
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                Color(0xFF3ABDC5),
+                                              ),
                                         ),
                                       ),
                                     ),

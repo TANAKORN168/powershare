@@ -35,7 +35,9 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
     super.initState();
     final p = widget.product;
     _nameCtrl = TextEditingController(text: p != null ? p['name'] : '');
-    _subtitleCtrl = TextEditingController(text: p != null ? (p['subtitle'] ?? '') : '');
+    _subtitleCtrl = TextEditingController(
+      text: p != null ? (p['subtitle'] ?? '') : '',
+    );
     // ใช้ field ชื่อจริงใน DB: "description"
     _descCtrl = TextEditingController(text: p != null ? p['description'] : '');
     _priceCtrl = TextEditingController(
@@ -110,18 +112,21 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
         'price': double.tryParse(_priceCtrl.text.trim()) ?? 0.0,
         'image': imageUrl ?? '',
         'category_id': _selectedCategoryId,
-        'last_status': widget.product == null ? 'Available' : (widget.product!['last_status'] ?? 'Available'),
+        'last_status': widget.product == null
+            ? 'AVAILABLE'
+            : (widget.product!['last_status'] ?? 'AVAILABLE'),
       };
 
       // ถ้าเป็นการสร้างใหม่ ให้ตั้ง last_status เป็น Available
       if (widget.product == null) {
-        payload['last_status'] = 'Available';
+        payload['last_status'] = 'AVAILABLE';
       }
 
       Map<String, dynamic> saved;
       final idRaw = widget.product?['id']?.toString();
       final uuidReg = RegExp(
-          r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$');
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+      );
 
       if (widget.product != null && idRaw != null) {
         // กรณีแก้ไข: ถ้า id เป็น UUID -> update, ถ้าไม่ใช่ -> ถามผู้ใช้ก่อนสร้างใหม่
@@ -132,10 +137,18 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
             context: context,
             builder: (c) => AlertDialog(
               title: const Text('ไอดีไม่ถูกต้อง'),
-              content: const Text('รายการนี้ไม่มีไอดีของฐานข้อมูล (ไม่สามารถอัพเดตได้)\nต้องการสร้างเป็นสินค้าใหม่หรือไม่?'),
+              content: const Text(
+                'รายการนี้ไม่มีไอดีของฐานข้อมูล (ไม่สามารถอัพเดตได้)\nต้องการสร้างเป็นสินค้าใหม่หรือไม่?',
+              ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('ยกเลิก')),
-                ElevatedButton(onPressed: () => Navigator.of(c).pop(true), child: const Text('สร้างใหม่')),
+                TextButton(
+                  onPressed: () => Navigator.of(c).pop(false),
+                  child: const Text('ยกเลิก'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(c).pop(true),
+                  child: const Text('สร้างใหม่'),
+                ),
               ],
             ),
           );
@@ -147,13 +160,15 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
           }
 
           final user = Session.instance.user;
-          if (user != null && user['id'] != null) payload['user_created'] = user['id'];
+          if (user != null && user['id'] != null)
+            payload['user_created'] = user['id'];
           saved = await ApiServices.createProduct(payload);
         }
       } else {
         // สร้างใหม่ตามปกติ
         final user = Session.instance.user;
-        if (user != null && user['id'] != null) payload['user_created'] = user['id'];
+        if (user != null && user['id'] != null)
+          payload['user_created'] = user['id'];
         saved = await ApiServices.createProduct(payload);
       }
 
@@ -161,7 +176,10 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
       Navigator.of(context).pop(saved);
     } catch (e, st) {
       debugPrint('AddEditProductPage._save error: $e\n$st');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('บันทึกไม่สำเร็จ: $e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('บันทึกไม่สำเร็จ: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -258,10 +276,7 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
                   maxScale: 4.0,
                   child: Container(
                     color: Colors.black,
-                    child: Image(
-                      image: prov,
-                      fit: BoxFit.contain,
-                    ),
+                    child: Image(image: prov, fit: BoxFit.contain),
                   ),
                 ),
               ),
@@ -327,7 +342,9 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
                     TextFormField(
                       controller: _nameCtrl,
                       decoration: _inputDecoration('ชื่อสินค้า'),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณาใส่ชื่อสินค้า' : null,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'กรุณาใส่ชื่อสินค้า'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -345,9 +362,12 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
                     TextFormField(
                       controller: _priceCtrl,
                       decoration: _inputDecoration('ราคา/วัน (บาท)'),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'กรุณาใส่ราคา';
+                        if (v == null || v.trim().isEmpty)
+                          return 'กรุณาใส่ราคา';
                         final val = double.tryParse(v.trim());
                         if (val == null) return 'รูปแบบราคาผิด';
                         if (val <= 0) return 'ราคาต้องมากกว่า 0';
@@ -357,22 +377,28 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
                     const SizedBox(height: 12),
                     // หมวดหมู่ (บังคับเลือก)
                     _loadingCategories
-                        ? const SizedBox(height: 56, child: Center(child: CircularProgressIndicator()))
+                        ? const SizedBox(
+                            height: 56,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
                         : DropdownButtonFormField<String>(
                             initialValue: _selectedCategoryId,
                             decoration: _inputDecoration('หมวดหมู่'),
                             items: _categories
-                                .map((c) => DropdownMenuItem(
-                                      value: c['id']?.toString(),
-                                      child: Text(c['name']?.toString() ?? ''),
-                                    ))
+                                .map(
+                                  (c) => DropdownMenuItem(
+                                    value: c['id']?.toString(),
+                                    child: Text(c['name']?.toString() ?? ''),
+                                  ),
+                                )
                                 .toList(),
                             onChanged: (v) {
                               setState(() {
                                 _selectedCategoryId = v;
                               });
                             },
-                            validator: (v) => (v == null) ? 'กรุณาเลือกหมวดหมู่' : null,
+                            validator: (v) =>
+                                (v == null) ? 'กรุณาเลือกหมวดหมู่' : null,
                           ),
                     const SizedBox(height: 20),
                     ElevatedButton(
@@ -382,7 +408,9 @@ class _AddEditProductPageState extends State<AddEditProductPage> {
                               width: 16,
                               height: 16,
                               child: CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
                                 strokeWidth: 2,
                               ),
                             )

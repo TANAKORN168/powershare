@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:powershare/loginPage.dart';
 import 'package:powershare/pages/cartPage.dart';
@@ -12,6 +11,7 @@ import 'package:powershare/pages/adminPage.dart';
 import 'basePage.dart';
 import 'package:powershare/services/session.dart';
 import 'package:powershare/services/apiServices.dart';
+import 'package:powershare/services/notificationService.dart';
 
 class MainLayout extends StatefulWidget {
   final int currentIndex;
@@ -57,25 +57,25 @@ class MainLayout extends StatefulWidget {
   }
 }
 
-class _MainLayoutState extends State<MainLayout> {
+class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
   late int _selectedIndex;
   late bool _isAdmin; // เก็บสถานะจริงจาก session หรือ widget.isAdmin
-  Timer? _cartTimer;
 
   // เปลี่ยนจาก final list เป็น getter เพื่อรองรับการแสดง admin แบบ dynamic
   List<Widget> get pages => [
-        BasePage(child: Center(child: HomePage())),
-        BasePage(child: Center(child: ProductPage())),
-        BasePage(child: Center(child: CartPage())),
-        BasePage(child: Center(child: RentalHistoryPage())),
-        BasePage(child: Center(child: SavedProductsPage())),
-        if (_isAdmin) BasePage(child: Center(child: AdminPage())),
-        BasePage(child: Center(child: ProfilePage())),
-      ];
+    BasePage(child: Center(child: HomePage())),
+    BasePage(child: Center(child: ProductPage())),
+    BasePage(child: Center(child: CartPage())),
+    BasePage(child: Center(child: RentalHistoryPage())),
+    BasePage(child: Center(child: SavedProductsPage())),
+    if (_isAdmin) BasePage(child: Center(child: AdminPage())),
+    BasePage(child: Center(child: ProfilePage())),
+  ];
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _selectedIndex = widget.currentIndex;
     _isAdmin = widget.isAdmin;
     final user = Session.instance.user;
@@ -85,19 +85,28 @@ class _MainLayoutState extends State<MainLayout> {
     }
     if (_selectedIndex >= pages.length) _selectedIndex = 0;
 
+    // subscribe/unsubscribe topics ตาม role
+    NotificationService.syncTopics(isAdmin: _isAdmin);
+
     // โหลดจำนวนรายการตะกร้าจาก server
     _loadCartCount();
-    // เริ่ม polling แบบเบา ๆ เพื่อให้ badge อัพเดตเป็น "real time"
-    _cartTimer = Timer.periodic(const Duration(seconds: 8), (_) {
-      _loadCartCount();
-    });
+    if (_isAdmin) _loadAdminPendingCount();
 
     _checkTokenAndLoadData();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadCartCount();
+      if (_isAdmin) _loadAdminPendingCount();
+      NotificationService.syncTopics(isAdmin: _isAdmin);
+    }
+  }
+
+  @override
   void dispose() {
-    _cartTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -111,9 +120,15 @@ class _MainLayoutState extends State<MainLayout> {
     setState(() {
       _selectedIndex = index;
     });
+    // อัปเดต cart count ทันทีเมื่อออกจาก CartPage หรือสลับแท็บใด
+    Future.microtask(() {
+      _loadCartCount();
+      if (_isAdmin) _loadAdminPendingCount();
+    });
   }
 
   int _cartItemCount = 0; // ตัวอย่างจำนวนสินค้าในตะกร้า
+  int _adminPendingCount = 0; // ผู้ใช้รอยืนยัน + การจองรออนุมัติ
 
   @override
   Widget build(BuildContext context) {
@@ -160,25 +175,55 @@ class _MainLayoutState extends State<MainLayout> {
         label: 'ตะกร้า',
       ),
       BottomNavigationBarItem(icon: Icon(Icons.event), label: 'การเช่า'),
-      BottomNavigationBarItem(
-        icon: Icon(Icons.favorite),
-        label: 'บันทึกไว้',
-      ),
+      BottomNavigationBarItem(icon: Icon(Icons.favorite), label: 'บันทึกไว้'),
     ];
 
     // ถ้าเป็น admin ให้เพิ่มปุ่ม Admin ก่อนปุ่มบัญชี
     if (_isAdmin) {
-      items.add(BottomNavigationBarItem(
-        icon: Icon(Icons.admin_panel_settings),
-        label: 'Admin',
-      ));
+      items.add(
+        BottomNavigationBarItem(
+          icon: Stack(
+            children: [
+              Icon(Icons.admin_panel_settings),
+              if (_adminPendingCount > 0)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: Container(
+                    padding: EdgeInsets.all(1),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    constraints: BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      transitionBuilder: (child, anim) =>
+                          ScaleTransition(scale: anim, child: child),
+                      child: Text(
+                        '$_adminPendingCount',
+                        key: ValueKey<int>(_adminPendingCount),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          label: 'Admin',
+        ),
+      );
     }
 
     // เพิ่มปุ่มบัญชี (Profile) ท้ายสุด
-    items.add(BottomNavigationBarItem(
-      icon: Icon(Icons.person_outline),
-      label: 'บัญชี',
-    ));
+    items.add(
+      BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'บัญชี'),
+    );
 
     return Scaffold(
       body: pages[_selectedIndex],
@@ -203,22 +248,40 @@ class _MainLayoutState extends State<MainLayout> {
         if (kDebugMode) print('MainLayout._loadCartCount: userId missing');
         return;
       }
-      if (kDebugMode) print('MainLayout._loadCartCount: calling ApiServices.getCartItemCountForUser for userId=$userId');
+      if (kDebugMode)
+        print(
+          'MainLayout._loadCartCount: calling ApiServices.getCartItemCountForUser for userId=$userId',
+        );
       final count = await ApiServices.getCartItemCountForUser(userId);
-      if (kDebugMode) print('MainLayout._loadCartCount: got count=$count (current=$_cartItemCount)');
-      if (mounted && _cartItemCount != count) {
-        setState(() {
-          _cartItemCount = count;
-        });
-      }
+      if (kDebugMode)
+        print(
+          'MainLayout._loadCartCount: got count=$count (current=$_cartItemCount)',
+        );
+      if (!mounted) return;
+      setState(() {
+        _cartItemCount = count;
+      });
     } catch (e) {
       if (kDebugMode) print('loadCartCount error: $e');
     }
   }
 
+  Future<void> _loadAdminPendingCount() async {
+    if (!_isAdmin) return;
+    try {
+      final count = await ApiServices.getAdminPendingCount();
+      if (!mounted) return;
+      setState(() {
+        _adminPendingCount = count;
+      });
+    } catch (e) {
+      if (kDebugMode) print('loadAdminPendingCount error: $e');
+    }
+  }
+
   Future<void> _checkTokenAndLoadData() async {
     final tokenValid = await ApiServices.checkAndRefreshToken();
-    
+
     if (!tokenValid) {
       // Token หมดอายุ - redirect ไป login
       if (mounted) {
@@ -229,11 +292,14 @@ class _MainLayoutState extends State<MainLayout> {
       }
       return;
     }
-    
+
     // Token ยังใช้ได้ - load ข้อมูลตามปกติ
     _loadCartCount();
+    if (_isAdmin) _loadAdminPendingCount();
   }
 
   // ให้เรียกแบบ: MainLayout.of(context)?.refreshCartCount();
   void refreshCartCount() => _loadCartCount();
+
+  void refreshAdminPendingCount() => _loadAdminPendingCount();
 }

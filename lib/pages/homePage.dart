@@ -42,7 +42,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _checkTokenAndLoadData() async {
     final tokenValid = await ApiServices.checkAndRefreshToken();
-    
+
     if (!tokenValid) {
       if (mounted) {
         Navigator.pushReplacement(
@@ -52,7 +52,7 @@ class _HomePageState extends State<HomePage> {
       }
       return;
     }
-    
+
     _loadPromotions();
     _loadPopular();
     _loadRecommended();
@@ -117,7 +117,10 @@ class _HomePageState extends State<HomePage> {
       _popularItems = [];
     });
     try {
-      final data = await ApiServices.getPopularProducts(limit: 10, onlyActive: true);
+      final data = await ApiServices.getPopularProducts(
+        limit: 10,
+        onlyActive: true,
+      );
       _popularItems = data.map((e) => Map<String, dynamic>.from(e)).toList();
     } catch (e) {
       if (kDebugMode) debugPrint('loadPopular error: $e');
@@ -134,7 +137,9 @@ class _HomePageState extends State<HomePage> {
     });
     try {
       final data = await ApiServices.getAvailableProducts(limit: 20);
-      _recommendedItems = data.map((e) => Map<String, dynamic>.from(e)).toList();
+      _recommendedItems = data
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
     } catch (e) {
       if (kDebugMode) debugPrint('loadRecommended error: $e');
       _recommendedItems = [];
@@ -148,7 +153,9 @@ class _HomePageState extends State<HomePage> {
     final user = Session.instance.user;
     if (user == null || user['id'] == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาเข้าสู่ระบบก่อนทำรายการ')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('กรุณาเข้าสู่ระบบก่อนทำรายการ')),
+        );
       }
       return;
     }
@@ -182,7 +189,9 @@ class _HomePageState extends State<HomePage> {
           }
         });
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง')),
+          );
         }
       }
     } catch (e) {
@@ -196,7 +205,9 @@ class _HomePageState extends State<HomePage> {
       });
       if (kDebugMode) debugPrint('_toggleLike error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('เกิดข้อผิดพลาด ลองใหม่อีกครั้ง')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('เกิดข้อผิดพลาด ลองใหม่อีกครั้ง')),
+        );
       }
     }
   }
@@ -300,81 +311,94 @@ class _HomePageState extends State<HomePage> {
         SizedBox(
           height: 120,
           child: _loadingPopular
-              ? const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator()))
+              ? const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(),
+                  ),
+                )
               : _popularItems.isEmpty
-                  ? const Center(child: Text('ยังไม่มีข้อมูลสินค้ายอดนิยม'))
-                  : ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _popularItems.length,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemBuilder: (context, index) {
-                        final item = _popularItems[index];
-                        final name = (item['name'] ?? 'ไม่มีชื่อ').toString();
-                        final image = (item['image'] ?? '').toString();
+              ? const Center(child: Text('ยังไม่มีข้อมูลสินค้ายอดนิยม'))
+              : ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _popularItems.length,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemBuilder: (context, index) {
+                    final item = _popularItems[index];
+                    final name = (item['name'] ?? 'ไม่มีชื่อ').toString();
+                    final image = (item['image'] ?? '').toString();
 
-                        return GestureDetector(
-                          onTap: () => _goToDetail(context, item),
-                          child: Container(
-                            width: 90,
-                            margin: const EdgeInsets.only(right: 16),
-                            child: Column(
-                              children: [
-                                CircleAvatar(
-                                  radius: 35,
-                                  backgroundColor: Colors.white,
-                                  child: ClipOval(
-                                    child: _buildImageWidget(image, size: 60),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  name,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(fontSize: 12),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
+                    return GestureDetector(
+                      onTap: () => _goToDetail(context, item),
+                      child: Container(
+                        width: 90,
+                        margin: const EdgeInsets.only(right: 16),
+                        child: Column(
+                          children: [
+                            CircleAvatar(
+                              radius: 35,
+                              backgroundColor: Colors.white,
+                              child: ClipOval(
+                                child: _buildImageWidget(image, size: 60),
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
+                            const SizedBox(height: 8),
+                            Text(
+                              name,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 12),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
         ),
         // ✅ โฆษณาแบบตัวหนังสือไหล
         const SizedBox(height: 8),
         SizedBox(
           height: 28,
-          child: Builder(builder: (_) {
-            if (_loadingPromotions) {
-              return const Center(
+          child: Builder(
+            builder: (_) {
+              if (_loadingPromotions) {
+                return const Center(
                   child: SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2)));
-            }
-            if (_promotionsText.isEmpty) {
-              return const Center(
-                child: Text(
-                  'ไม่มีโปรโมชั่นในขณะนี้',
-                  style: TextStyle(color: Colors.grey),
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                );
+              }
+              if (_promotionsText.isEmpty) {
+                return const Center(
+                  child: Text(
+                    'ไม่มีโปรโมชั่นในขณะนี้',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                );
+              }
+              return Marquee(
+                text: _promotionsText,
+                style: const TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
                 ),
+                scrollAxis: Axis.horizontal,
+                blankSpace: 50.0,
+                velocity: 50.0,
+                pauseAfterRound: const Duration(seconds: 1),
+                startPadding: 10.0,
+                accelerationDuration: const Duration(seconds: 1),
+                accelerationCurve: Curves.linear,
+                decelerationDuration: const Duration(milliseconds: 500),
+                decelerationCurve: Curves.easeOut,
               );
-            }
-            return Marquee(
-              text: _promotionsText,
-              style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-              scrollAxis: Axis.horizontal,
-              blankSpace: 50.0,
-              velocity: 50.0,
-              pauseAfterRound: const Duration(seconds: 1),
-              startPadding: 10.0,
-              accelerationDuration: const Duration(seconds: 1),
-              accelerationCurve: Curves.linear,
-              decelerationDuration: const Duration(milliseconds: 500),
-              decelerationCurve: Curves.easeOut,
-            );
-          }),
+            },
+          ),
         ),
         const SizedBox(height: 10),
         Container(
@@ -393,81 +417,99 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
 
-        // Recommended list -> ใช้ข้อมูลจาก Supabase: last_status = 'Available'
+        // Recommended list -> ใช้ข้อมูลจาก Supabase: last_status = 'AVAILABLE'
         Expanded(
           child: _loadingRecommended
               ? const Center(child: CircularProgressIndicator())
               : _recommendedItems.isEmpty
-                  ? const Center(child: Text('ยังไม่มีสินค้าที่พร้อมให้คืนตอนนี้'))
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _recommendedItems.length,
-                      itemBuilder: (context, index) {
-                        final item = _recommendedItems[index];
-                        final productId = (item['id'] ?? '').toString();
-                        final name = (item['name'] ?? 'ไม่มีชื่อ').toString();
-                        final description = (item['description'] ?? '').toString();
-                        final image = (item['image'] ?? '').toString();
-                        final priceVal = item['price'] ?? item['rent_amount'] ?? '';
-                        final priceText = _formatPrice(priceVal);
+              ? const Center(child: Text('ยังไม่มีสินค้าตอนนี้'))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _recommendedItems.length,
+                  itemBuilder: (context, index) {
+                    final item = _recommendedItems[index];
+                    final productId = (item['id'] ?? '').toString();
+                    final name = (item['name'] ?? 'ไม่มีชื่อ').toString();
+                    final description = (item['description'] ?? '').toString();
+                    final image = (item['image'] ?? '').toString();
+                    final priceVal = item['price'] ?? item['rent_amount'] ?? '';
+                    final priceText = _formatPrice(priceVal);
 
-                        return Stack(
-                          children: [
-                            Card(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Row(
-                                  children: [
-                                    ClipRRect(borderRadius: BorderRadius.circular(8), child: _buildImageWidget(image, size: 80)),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                    return Stack(
+                      children: [
+                        Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: _buildImageWidget(image, size: 80),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        description,
+                                        style: TextStyle(
+                                          color: Colors.grey[700],
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
                                         children: [
                                           Text(
-                                            name,
-                                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                            priceText.isNotEmpty
+                                                ? priceText
+                                                : 'ราคาไม่ระบุ',
+                                            style: const TextStyle(
+                                              color: Color(0xFF3ABDC5),
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            description,
-                                            style: TextStyle(color: Colors.grey[700]),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text(
-                                                priceText.isNotEmpty ? priceText : 'ราคาไม่ระบุ',
-                                                style: const TextStyle(color: Color(0xFF3ABDC5), fontWeight: FontWeight.bold),
-                                              ),
-                                              TextButton(
-                                                onPressed: () => _goToDetail(context, item),
-                                                child: const Text('ดูรายละเอียด'),
-                                              ),
-                                            ],
+                                          TextButton(
+                                            onPressed: () =>
+                                                _goToDetail(context, item),
+                                            child: const Text('ดูรายละเอียด'),
                                           ),
                                         ],
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
-                            // ปุ่มถูกใจที่มุมขวาบนของ Card (แสดงเฉพาะใน Recommended)
-                            Positioned(
-                              top: 6,
-                              right: 6,
-                              child: _buildLikeButton(productId),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
+                          ),
+                        ),
+                        // ปุ่มถูกใจที่มุมขวาบนของ Card (แสดงเฉพาะใน Recommended)
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: _buildLikeButton(productId),
+                        ),
+                      ],
+                    );
+                  },
+                ),
         ),
       ],
     );

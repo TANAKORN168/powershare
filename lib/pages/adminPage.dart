@@ -4,9 +4,46 @@ import 'package:powershare/pages/categoryPage.dart';
 import 'package:powershare/pages/userApprovalPage.dart';
 import 'package:powershare/pages/addProductPage.dart';
 import 'package:powershare/pages/PaymentSettingsPage.dart';
+import 'package:powershare/pages/reservationApprovalPage.dart';
+import 'package:powershare/services/apiServices.dart';
 
-class AdminPage extends StatelessWidget {
+class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
+
+  @override
+  State<AdminPage> createState() => _AdminPageState();
+}
+
+class _AdminPageState extends State<AdminPage> {
+  late Future<List<Map<String, dynamic>>> _reservationsFuture;
+
+  void _refreshReservations() {
+    _reservationsFuture = ApiServices.getReservations();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshReservations();
+  }
+
+  Widget _buildBadge(int count) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.red,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        count.toString(),
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +96,56 @@ class AdminPage extends StatelessWidget {
                       ),
                     ),
 
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(
+                          Icons.shopping_cart,
+                          color: Color(0xFF3ABDC5),
+                        ),
+                        title: const Text('อนุมัติการจอง'),
+                        subtitle: const Text(
+                          'อนุมัติการจองและอัพโหลดข้อมูลการส่ง',
+                        ),
+                        trailing: FutureBuilder<List<Map<String, dynamic>>>(
+                          future: _reservationsFuture,
+                          builder: (context, snapshot) {
+                            Widget badge = const SizedBox.shrink();
+                            if (snapshot.hasData) {
+                              final data = snapshot.data!;
+                              final pendingCount = data.where((r) {
+                                final cartItem =
+                                    r['cart_item'] as Map<String, dynamic>?;
+                                final status = cartItem?['status']?.toString();
+                                return status == 'RESERVED';
+                              }).length;
+                              if (pendingCount > 0) {
+                                badge = _buildBadge(pendingCount);
+                              }
+                            }
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                badge,
+                                if (badge is! SizedBox)
+                                  const SizedBox(width: 8),
+                                const Icon(Icons.arrow_forward_ios, size: 16),
+                              ],
+                            );
+                          },
+                        ),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ReservationApprovalPage(),
+                            ),
+                          ).then((_) {
+                            if (!mounted) return;
+                            setState(_refreshReservations);
+                          });
+                        },
+                      ),
+                    ),
+
                     // ย้ายหมวดหมู่ขึ้นมาก่อนสินค้า
                     Card(
                       child: ListTile(
@@ -67,7 +154,9 @@ class AdminPage extends StatelessWidget {
                           color: Color(0xFF3ABDC5),
                         ),
                         title: const Text('หมวดหมู่สินค้า'),
-                        subtitle: const Text('จัดการหมวดหมู่สินค้า (เพิ่ม/แก้ไข/ลบ)'),
+                        subtitle: const Text(
+                          'จัดการหมวดหมู่สินค้า (เพิ่ม/แก้ไข/ลบ)',
+                        ),
                         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                         onTap: () {
                           Navigator.of(context).push(
@@ -108,7 +197,9 @@ class AdminPage extends StatelessWidget {
                           color: Color(0xFF3ABDC5),
                         ),
                         title: const Text('ข้อความโปรโมชั่น'),
-                        subtitle: const Text('จัดการข้อความไหลหน้าแรก (เพิ่ม/แก้ไข/ปิดใช้งาน)'),
+                        subtitle: const Text(
+                          'จัดการข้อความไหลหน้าแรก (เพิ่ม/แก้ไข/ปิดใช้งาน)',
+                        ),
                         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                         onTap: () {
                           Navigator.of(context).push(
@@ -122,12 +213,17 @@ class AdminPage extends StatelessWidget {
 
                     Card(
                       child: ListTile(
-                        leading: const Icon(Icons.payment, color: Color(0xFF3ABDC5)),
+                        leading: const Icon(
+                          Icons.payment,
+                          color: Color(0xFF3ABDC5),
+                        ),
                         title: const Text('ตั้งค่า QR ชำระเงิน'),
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const PaymentSettingsPage()),
+                            MaterialPageRoute(
+                              builder: (context) => const PaymentSettingsPage(),
+                            ),
                           );
                         },
                       ),

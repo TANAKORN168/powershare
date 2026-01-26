@@ -17,8 +17,9 @@ class _ProductPageState extends State<ProductPage> {
   List<Map<String, dynamic>> filteredProducts = [];
   bool _loadingCategories = true;
   bool _loadingProducts = true;
-  
+
   String? _selectedCategoryId;
+  bool _showOnlyAvailable = false;
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -82,6 +83,14 @@ class _ProductPageState extends State<ProductPage> {
   void _filterProducts() {
     List<Map<String, dynamic>> filtered = products;
 
+    // กรองตามสถานะ (แสดงเฉพาะที่พร้อมให้เช่า)
+    if (_showOnlyAvailable) {
+      filtered = filtered.where((p) {
+        final status = p['last_status']?.toString() ?? 'AVAILABLE';
+        return status == 'AVAILABLE';
+      }).toList();
+    }
+
     // กรองตามหมวดหมู่
     if (_selectedCategoryId != null) {
       filtered = filtered.where((p) {
@@ -105,7 +114,9 @@ class _ProductPageState extends State<ProductPage> {
 
   void _onCategoryTap(String? categoryId) {
     setState(() {
-      _selectedCategoryId = categoryId == _selectedCategoryId ? null : categoryId;
+      _selectedCategoryId = categoryId == _selectedCategoryId
+          ? null
+          : categoryId;
       _filterProducts();
     });
   }
@@ -116,20 +127,58 @@ class _ProductPageState extends State<ProductPage> {
 
   String _formatPrice(dynamic priceVal) {
     if (priceVal == null) return '฿0/วัน';
-    
+
     double? value;
     if (priceVal is num) {
       value = priceVal.toDouble();
     } else {
       value = double.tryParse(priceVal.toString());
     }
-    
+
     if (value == null) {
       final s = priceVal.toString();
       return s.isNotEmpty ? s : '฿0/วัน';
     }
-    
+
     return '${FormatHelper.formatPrice(value)}/วัน';
+  }
+
+  String _getStatusLabel(String status) {
+    switch (status) {
+      case 'AVAILABLE':
+        return 'พร้อมให้เช่า';
+      case 'RESERVED':
+        return 'ถูกจอง';
+      case 'RENTED':
+        return 'ถูกเช่า';
+      case 'Returned':
+        return 'คืนแล้ว';
+      case 'MAINTENANCE':
+        return 'กำลังซ่อมบำรุง';
+      case 'UNAVAILABLE':
+        return 'ไม่พร้อมให้เช่า';
+      default:
+        return status;
+    }
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'AVAILABLE':
+        return Colors.green;
+      case 'RESERVED':
+        return Colors.blue;
+      case 'RENTED':
+        return Colors.orange;
+      case 'Returned':
+        return Colors.purple;
+      case 'MAINTENANCE':
+        return Colors.red;
+      case 'UNAVAILABLE':
+        return Colors.grey;
+      default:
+        return Colors.grey;
+    }
   }
 
   @override
@@ -148,30 +197,59 @@ class _ProductPageState extends State<ProductPage> {
               ),
               const SizedBox(height: 16),
               // ช่องค้นหา
-              TextField(
-                controller: _searchController,
-                onChanged: (_) => _onSearchChanged(),
-                decoration: InputDecoration(
-                  hintText: 'ค้นหาสินค้า...',
-                  prefixIcon: const Icon(Icons.search, color: Color(0xFF3ABDC5)),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _searchController.clear();
-                            _onSearchChanged();
-                          },
-                        )
-                      : null,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF3ABDC5)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF3ABDC5), width: 2),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (_) => _onSearchChanged(),
+                  decoration: InputDecoration(
+                    hintText: 'ค้นหาสินค้า...',
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: Color(0xFF3ABDC5),
+                    ),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              _onSearchChanged();
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF3ABDC5)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF3ABDC5),
+                        width: 2,
+                      ),
+                    ),
                   ),
                 ),
+              ),
+              const SizedBox(height: 6),
+              // ตัวกรองแสดงเฉพาะสินค้าพร้อมให้เช่า
+              Row(
+                children: [
+                  Checkbox(
+                    value: _showOnlyAvailable,
+                    onChanged: (value) {
+                      setState(() {
+                        _showOnlyAvailable = value ?? false;
+                        _filterProducts();
+                      });
+                    },
+                    activeColor: const Color(0xFF3ABDC5),
+                  ),
+                  const Text(
+                    'แสดงเฉพาะสินค้าพร้อมให้เช่า',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ],
               ),
             ],
           ),
@@ -207,13 +285,15 @@ class _ProductPageState extends State<ProductPage> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: isSelected ? const Color(0xFF3ABDC5) : Colors.transparent,
+                              color: isSelected
+                                  ? const Color(0xFF3ABDC5)
+                                  : Colors.transparent,
                               width: 3,
                             ),
                           ),
                           child: CircleAvatar(
                             radius: 35,
-                            backgroundColor: isSelected 
+                            backgroundColor: isSelected
                                 ? const Color(0xFF3ABDC5).withValues(alpha: 0.1)
                                 : Colors.grey[200],
                             child: imageUrl.isNotEmpty
@@ -225,14 +305,14 @@ class _ProductPageState extends State<ProductPage> {
                                       fit: BoxFit.cover,
                                       errorBuilder: (_, __, ___) => const Icon(
                                         Icons.category,
-                                        size: 35,
+                                        size: 24,
                                         color: Color(0xFF3ABDC5),
                                       ),
                                     ),
                                   )
                                 : const Icon(
                                     Icons.category,
-                                    size: 35,
+                                    size: 24,
                                     color: Color(0xFF3ABDC5),
                                   ),
                           ),
@@ -243,8 +323,12 @@ class _ProductPageState extends State<ProductPage> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isSelected ? const Color(0xFF3ABDC5) : Colors.black,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: isSelected
+                                ? const Color(0xFF3ABDC5)
+                                : Colors.black,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -257,7 +341,7 @@ class _ProductPageState extends State<ProductPage> {
             ),
           ),
 
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
 
         // แถบหัวข้อรายการสินค้า
         Container(
@@ -283,179 +367,206 @@ class _ProductPageState extends State<ProductPage> {
           child: _loadingProducts
               ? const Center(child: CircularProgressIndicator())
               : filteredProducts.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
-                          const SizedBox(height: 16),
-                          Text(
-                            'ไม่พบสินค้า',
-                            style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                          ),
-                          if (_selectedCategoryId != null || _searchController.text.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            TextButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  _selectedCategoryId = null;
-                                  _searchController.clear();
-                                  _filterProducts();
-                                });
-                              },
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('แสดงทั้งหมด'),
-                            ),
-                          ],
-                        ],
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+                      const SizedBox(height: 16),
+                      Text(
+                        'ไม่พบสินค้า',
+                        style: TextStyle(fontSize: 18, color: Colors.grey[600]),
                       ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadProducts,
-                      child: ListView.builder(
-                        itemCount: filteredProducts.length,
-                        padding: const EdgeInsets.all(16),
-                        itemBuilder: (context, index) {
-                          final product = filteredProducts[index];
-                          final productId = product['id']?.toString();
-                          final imageUrl = product['image']?.toString() ?? 
-                                          product['image_url']?.toString() ?? '';
-                          final priceVal = product['price'] ?? product['rent_amount'] ?? 0;
-                          final status = product['last_status']?.toString() ?? 'Available';
+                      if (_selectedCategoryId != null ||
+                          _searchController.text.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _selectedCategoryId = null;
+                              _searchController.clear();
+                              _filterProducts();
+                            });
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('แสดงทั้งหมด'),
+                        ),
+                      ],
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadProducts,
+                  child: ListView.builder(
+                    itemCount: filteredProducts.length,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    itemBuilder: (context, index) {
+                      final product = filteredProducts[index];
+                      final productId = product['id']?.toString();
+                      final imageUrl =
+                          product['image']?.toString() ??
+                          product['image_url']?.toString() ??
+                          '';
+                      final priceVal =
+                          product['price'] ?? product['rent_amount'] ?? 0;
+                      final status =
+                          product['last_status']?.toString() ?? 'AVAILABLE';
 
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => ProductDetailPage(
-                                      productId: productId,
-                                      name: product['name']?.toString() ?? 
-                                            product['title']?.toString() ?? 'สินค้า',
-                                      image: imageUrl,
-                                      description: product['description']?.toString() ?? '',
-                                      price: _formatPrice(priceVal),
-                                      status: status,
-                                    ),
-                                  ),
-                                );
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Row(
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: imageUrl.isNotEmpty
-                                          ? Image.network(
-                                              imageUrl,
-                                              width: 80,
-                                              height: 80,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) => Container(
-                                                width: 80,
-                                                height: 80,
+                      return Card(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ProductDetailPage(
+                                  productId: productId,
+                                  name:
+                                      product['name']?.toString() ??
+                                      product['title']?.toString() ??
+                                      'สินค้า',
+                                  image: imageUrl,
+                                  description:
+                                      product['description']?.toString() ?? '',
+                                  price: _formatPrice(priceVal),
+                                  status: status,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: imageUrl.isNotEmpty
+                                      ? Image.network(
+                                          imageUrl,
+                                          width: 60,
+                                          height: 60,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) =>
+                                              Container(
+                                                width: 60,
+                                                height: 60,
                                                 color: Colors.grey[300],
-                                                child: const Icon(Icons.image_not_supported),
+                                                child: const Icon(
+                                                  Icons.image_not_supported,
+                                                ),
                                               ),
-                                            )
-                                          : Container(
-                                              width: 80,
-                                              height: 80,
-                                              color: Colors.grey[300],
-                                              child: const Icon(Icons.shopping_bag),
-                                            ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        )
+                                      : Container(
+                                          width: 60,
+                                          height: 60,
+                                          color: Colors.grey[300],
+                                          child: const Icon(Icons.shopping_bag),
+                                        ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        product['name']?.toString() ??
+                                            product['title']?.toString() ??
+                                            'สินค้า',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        product['description']?.toString() ??
+                                            '',
+                                        style: TextStyle(
+                                          color: Colors.grey[700],
+                                          fontSize: 11,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Text(
-                                            product['name']?.toString() ?? 
-                                            product['title']?.toString() ?? 'สินค้า',
-                                            style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            product['description']?.toString() ?? '',
-                                            style: TextStyle(color: Colors.grey[700]),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    _formatPrice(priceVal),
-                                                    style: const TextStyle(
-                                                      color: Color(0xFF3ABDC5),
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 16,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  // แสดงสถานะ
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(
+                                              Text(
+                                                _formatPrice(priceVal),
+                                                style: const TextStyle(
+                                                  color: Color(0xFF3ABDC5),
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 16,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              // แสดงสถานะ
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
                                                       horizontal: 8,
                                                       vertical: 2,
                                                     ),
-                                                    decoration: BoxDecoration(
-                                                      color: status == 'Available'
-                                                          ? Colors.green.withValues(alpha: 0.1)
-                                                          : Colors.orange.withValues(alpha: 0.1),
-                                                      borderRadius: BorderRadius.circular(4),
-                                                      border: Border.all(
-                                                        color: status == 'Available'
-                                                            ? Colors.green
-                                                            : Colors.orange,
-                                                      ),
-                                                    ),
-                                                    child: Text(
-                                                      status == 'Available' ? 'ว่าง' : status,
-                                                      style: TextStyle(
-                                                        fontSize: 10,
-                                                        color: status == 'Available'
-                                                            ? Colors.green
-                                                            : Colors.orange,
-                                                        fontWeight: FontWeight.bold,
-                                                      ),
+                                                decoration: BoxDecoration(
+                                                  color: _getStatusColor(
+                                                    status,
+                                                  ).withValues(alpha: 0.1),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: _getStatusColor(
+                                                      status,
                                                     ),
                                                   ),
-                                                ],
-                                              ),
-                                              const Icon(
-                                                Icons.arrow_forward_ios,
-                                                size: 16,
-                                                color: Colors.grey,
+                                                ),
+                                                child: Text(
+                                                  _getStatusLabel(status),
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: _getStatusColor(
+                                                      status,
+                                                    ),
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
                                               ),
                                             ],
                                           ),
+                                          const Icon(
+                                            Icons.arrow_forward_ios,
+                                            size: 16,
+                                            color: Colors.grey,
+                                          ),
                                         ],
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
-                          );
-                        },
-                      ),
-                    ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
         ),
       ],
     );

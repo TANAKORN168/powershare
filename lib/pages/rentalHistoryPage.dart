@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:powershare/services/rental_service.dart';
+import 'package:powershare/services/apiServices.dart';
 import 'package:powershare/services/session.dart';
 import 'package:intl/intl.dart';
 
@@ -36,8 +36,70 @@ class _RentalHistoryPageState extends State<RentalHistoryPage> {
         return;
       }
 
-      final history = await RentalService.getRentalHistory(_userId!);
-      if (kDebugMode) print('RentalHistoryPage: got ${history.length} rentals');
+      // ดึงข้อมูลจาก carts และ cart_items
+      final carts = await ApiServices.getUserReservations(userId: _userId);
+      if (kDebugMode) print('RentalHistoryPage: got ${carts.length} carts');
+
+      // แปลงข้อมูล carts เป็น rentalHistory
+      final history = <Map<String, dynamic>>[];
+      for (final cart in carts) {
+        final cartItems = cart['cart_items'] as List<dynamic>? ?? [];
+
+        for (final item in cartItems) {
+          final cartItem = item as Map<String, dynamic>;
+          final product = cartItem['products'] as Map<String, dynamic>?;
+
+          if (product != null) {
+            // กำหนดสถานะตามเงื่อนไข
+            String status = 'รอชำระเงิน'; // ค่าเริ่มต้น
+            Color statusColor = Colors.orange;
+            String? rejectNote;
+
+            final cartStatus = cart['status']?.toString() ?? '';
+            final cartItemStatus = cartItem['status']?.toString() ?? 'RESERVED';
+            final paidAt = cart['paid_at'];
+
+            final isRejectStatus =
+                cartItemStatus.toUpperCase() == 'REJECT' ||
+                cartItemStatus.toLowerCase() == 'reject';
+
+            if (isRejectStatus) {
+              status = 'ปฏิเสธการเช่า';
+              statusColor = Colors.red;
+              rejectNote = cartItem['rejection_reason']?.toString();
+            } else if (paidAt != null && paidAt.toString().isNotEmpty) {
+              // carts->paid (paid_at is not null)
+              if (cartItemStatus == 'RESERVED') {
+                status = 'รอจัดส่ง';
+                statusColor = Colors.blue;
+              } else if (cartItemStatus == 'RENTED') {
+                status = 'กำลังเช่าอยู่';
+                statusColor = Colors.green;
+              }
+            } else if (cartStatus == 'RESERVED' ||
+                cartItemStatus == 'RESERVED') {
+              status = 'รอชำระเงิน';
+              statusColor = Colors.orange;
+            }
+
+            history.add({
+              'id': cartItem['id'],
+              'cart_id': cart['id'],
+              'name': product['name']?.toString() ?? 'สินค้า',
+              'image': product['image']?.toString() ?? '',
+              'rent_start': cartItem['rent_start'],
+              'rent_end': cartItem['rent_end'],
+              'status': status,
+              'status_color': statusColor,
+              'is_active': status == 'กำลังเช่าอยู่',
+              'rejection_reason': rejectNote,
+            });
+          }
+        }
+      }
+
+      if (kDebugMode)
+        print('RentalHistoryPage: processed ${history.length} items');
 
       if (mounted) {
         setState(() {
@@ -115,99 +177,112 @@ class _RentalHistoryPageState extends State<RentalHistoryPage> {
           child: _loading
               ? const Center(child: CircularProgressIndicator())
               : rentalHistory.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'ยังไม่มีประวัติการเช่า',
-                        style: TextStyle(fontSize: 16, color: Colors.grey),
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadRentalHistory,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: rentalHistory.length,
-                        itemBuilder: (context, index) {
-                          final item = rentalHistory[index];
-                          final isActive = item['status'] == 'เช่าอยู่';
-                          final imageUrl = item['image']?.toString() ?? '';
+              ? const Center(
+                  child: Text(
+                    'ยังไม่มีประวัติการเช่า',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadRentalHistory,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: rentalHistory.length,
+                    itemBuilder: (context, index) {
+                      final item = rentalHistory[index];
+                      final isActive = item['is_active'] ?? false;
+                      final imageUrl = item['image']?.toString() ?? '';
+                      final statusColor = item['status_color'] ?? Colors.grey;
 
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Row(
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: imageUrl.isNotEmpty
-                                        ? Image.network(
-                                            imageUrl,
-                                            width: 80,
-                                            height: 80,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => Container(
-                                              width: 80,
-                                              height: 80,
-                                              color: Colors.grey[300],
-                                              child: const Icon(Icons.image_not_supported),
-                                            ),
-                                          )
-                                        : Container(
-                                            width: 80,
-                                            height: 80,
-                                            color: Colors.grey[300],
-                                            child: const Icon(Icons.shopping_bag),
-                                          ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          item['name'] ?? 'สินค้า',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: imageUrl.isNotEmpty
+                                    ? Image.network(
+                                        imageUrl,
+                                        width: 80,
+                                        height: 80,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => Container(
+                                          width: 80,
+                                          height: 80,
+                                          color: Colors.grey[300],
+                                          child: const Icon(
+                                            Icons.image_not_supported,
                                           ),
                                         ),
-                                        const SizedBox(height: 4),
-                                        Text('เริ่มเช่า: ${_formatDate(item['rent_start'])}'),
-                                        Text('สิ้นสุด: ${_formatDate(item['rent_end'])}'),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          item['status'] ?? '',
-                                          style: TextStyle(
-                                            color: isActive ? Colors.green : Colors.grey,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        if (isActive)
-                                          Align(
-                                            alignment: Alignment.centerRight,
-                                            child: TextButton.icon(
-                                              onPressed: () =>
-                                                  _reportProblem(context, item['name']),
-                                              icon: const Icon(
-                                                Icons.build_circle,
-                                                color: Colors.orange,
-                                              ),
-                                              label: const Text('แจ้งซ่อม/เปลี่ยน'),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                                      )
+                                    : Container(
+                                        width: 80,
+                                        height: 80,
+                                        color: Colors.grey[300],
+                                        child: const Icon(Icons.shopping_bag),
+                                      ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item['name'] ?? 'สินค้า',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'เริ่มเช่า: ${_formatDate(item['rent_start'])}',
+                                    ),
+                                    Text(
+                                      'สิ้นสุด: ${_formatDate(item['rent_end'])}',
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      item['status'] ?? '',
+                                      style: TextStyle(
+                                        color: statusColor,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    if ((item['status'] ?? '') ==
+                                            'ปฏิเสธการเช่า' &&
+                                        (item['rejection_reason'] != null &&
+                                            item['rejection_reason']
+                                                .toString()
+                                                .trim()
+                                                .isNotEmpty))
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          top: 4.0,
+                                        ),
+                                        child: Text(
+                                          'หมายเหตุ: 	${item['rejection_reason'].toString().trim()}',
+                                          style: const TextStyle(
+                                            color: Colors.red,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
         ),
       ],
     );

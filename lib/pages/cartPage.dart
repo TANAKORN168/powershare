@@ -6,6 +6,8 @@ import 'package:powershare/services/session.dart';
 import 'package:powershare/helps/formatHelper.dart';
 import 'package:http/http.dart' as http; // เพิ่ม
 import 'dart:convert'; // เพิ่ม
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 
 class CartPage extends StatefulWidget {
   const CartPage({super.key});
@@ -27,7 +29,8 @@ class _CartPageState extends State<CartPage> {
   // เพิ่ม method โหลดการตั้งค่า
   Future<void> _loadPaymentSettings() async {
     try {
-      final Map<String, dynamic>? settings = await ApiServices.getPaymentSettings(); // ← เพิ่ม type
+      final Map<String, dynamic>? settings =
+          await ApiServices.getPaymentSettings(); // ← เพิ่ม type
       if (kDebugMode) print('🔵 Payment settings loaded: $settings');
       if (mounted && settings != null) {
         setState(() => _paymentSettings = settings);
@@ -173,6 +176,8 @@ class _CartPageState extends State<CartPage> {
             cartItems.removeAt(index);
             _loading = false;
           });
+          // อัปเดต badge ตะกร้าใน MainLayout
+          MainLayout.of(context)?.refreshCartCount();
         }
         ScaffoldMessenger.of(
           context,
@@ -199,18 +204,18 @@ class _CartPageState extends State<CartPage> {
   Future<void> _editItem(int index) async {
     final item = cartItems[index];
     final itemId = item['item_id']?.toString();
-    
+
     if (itemId == null || itemId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ไม่พบรหัสรายการ')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('ไม่พบรหัสรายการ')));
       return;
     }
 
     // Parse วันที่เดิม
     DateTime? currentStart;
     DateTime? currentEnd;
-    
+
     try {
       if (item['rent_start'] != null) {
         currentStart = DateTime.parse(item['rent_start'].toString());
@@ -225,7 +230,7 @@ class _CartPageState extends State<CartPage> {
     // เปิด dialog เลือกวันที่ใหม่
     final now = DateTime.now();
     final minStartDate = now.add(const Duration(days: 3));
-    
+
     final result = await showDateRangePicker(
       context: context,
       firstDate: minStartDate,
@@ -257,7 +262,7 @@ class _CartPageState extends State<CartPage> {
       final updateUrl = Uri.parse(
         '${ApiConfig.baseUrl}/rest/v1/cart_items?id=eq.$itemId',
       );
-      
+
       final token = Session.instance.accessToken ?? ApiConfig.apiKey;
       final headers = {
         'apikey': ApiConfig.apiKey,
@@ -331,11 +336,11 @@ class _CartPageState extends State<CartPage> {
         '${ApiConfig.baseUrl}/rest/v1/cart_items?cart_id=eq.$cartId',
       );
       final itemsResp = await http.get(itemsUrl, headers: headers);
-      
+
       if (itemsResp.statusCode == 200) {
         final items = jsonDecode(itemsResp.body) as List<dynamic>;
         double total = 0;
-        
+
         for (var item in items) {
           final unitPrice = (item['unit_price'] is num)
               ? (item['unit_price'] as num).toDouble()
@@ -354,7 +359,7 @@ class _CartPageState extends State<CartPage> {
           'total_amount': total,
           'updated_at': DateTime.now().toIso8601String(),
         };
-        
+
         await http.patch(cartUrl, headers: headers, body: jsonEncode(cartBody));
       }
     } catch (e) {
@@ -480,23 +485,34 @@ class _CartPageState extends State<CartPage> {
                                       int days = 1;
                                       final rentStart = item['rent_start'];
                                       final rentEnd = item['rent_end'];
-                                      
-                                      if (rentStart != null && rentEnd != null) {
+
+                                      if (rentStart != null &&
+                                          rentEnd != null) {
                                         try {
-                                          final startDate = DateTime.parse(rentStart.toString());
-                                          final endDate = DateTime.parse(rentEnd.toString());
-                                          days = endDate.difference(startDate).inDays + 1;
+                                          final startDate = DateTime.parse(
+                                            rentStart.toString(),
+                                          );
+                                          final endDate = DateTime.parse(
+                                            rentEnd.toString(),
+                                          );
+                                          days =
+                                              endDate
+                                                  .difference(startDate)
+                                                  .inDays +
+                                              1;
                                         } catch (e) {
-                                          days = item['rental_days'] as int? ?? 1;
+                                          days =
+                                              item['rental_days'] as int? ?? 1;
                                         }
                                       } else {
                                         days = item['rental_days'] as int? ?? 1;
                                       }
-                                      
+
                                       final itemTotal = dailyPrice * days;
-                                      
+
                                       return Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             '${FormatHelper.formatPrice(dailyPrice)}/วัน × $days วัน',
@@ -543,12 +559,19 @@ class _CartPageState extends State<CartPage> {
                                     children: [
                                       Expanded(
                                         child: ElevatedButton(
-                                          onPressed: () => _editItem(index), // เพิ่ม logic ตรงนี้
+                                          onPressed: () => _editItem(
+                                            index,
+                                          ), // เพิ่ม logic ตรงนี้
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: const Color(0xFF3ABDC5),
-                                            padding: const EdgeInsets.symmetric(vertical: 12),
+                                            backgroundColor: const Color(
+                                              0xFF3ABDC5,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
                                             shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
                                             ),
                                           ),
                                           child: const Text(
@@ -618,127 +641,570 @@ class _CartPageState extends State<CartPage> {
                 color: Colors.transparent,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
-                  onTap: cartItems.isEmpty ? null : () async {
-                    if (_paymentSettings == null) {
-                      await _loadPaymentSettings();
-                    }
+                  onTap: cartItems.isEmpty
+                      ? null
+                      : () async {
+                          final cartIdForPayment = cartItems.isNotEmpty
+                              ? cartItems.first['cart_id']?.toString()
+                              : null;
 
-                    final qrImageUrl = _paymentSettings?['qr_image_url']?.toString();
-                    final promptpayName = _paymentSettings?['promptpay_name']?.toString() ?? 'ระบบเช่า';
-                    final promptpayNumber = _paymentSettings?['promptpay_number']?.toString();
+                          final ImagePicker picker = ImagePicker();
+                          File? selectedSlip;
+                          bool isUploadingSlip = false;
+                          String? dialogError;
 
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        title: const Text('QR Code ชำระเงิน', textAlign: TextAlign.center),
-                        content: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('ยอดชำระทั้งหมด', style: TextStyle(fontSize: 16)),
-                            const SizedBox(height: 8),
-                            Text(
-                              FormatHelper.formatPrice(total),
-                              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF3ABDC5)),
-                            ),
-                            const SizedBox(height: 20),
-                            
-                            // แสดง QR Code จริงจาก database
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                border: Border.all(color: Colors.grey.shade300, width: 2),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: qrImageUrl != null && qrImageUrl.isNotEmpty
-                                  ? Image.network(
-                                      qrImageUrl,
-                                      width: 200,
-                                      height: 200,
-                                      fit: BoxFit.contain,
-                                      errorBuilder: (_, __, ___) => const Icon(
-                                        Icons.qr_code_2,
-                                        size: 120,
-                                        color: Color(0xFF3ABDC5),
+                          if (_paymentSettings == null) {
+                            await _loadPaymentSettings();
+                          }
+
+                          final qrImageUrl = _paymentSettings?['qr_image_url']
+                              ?.toString();
+                          final promptpayName =
+                              _paymentSettings?['promptpay_name']?.toString() ??
+                              'ระบบเช่า';
+                          final promptpayNumber =
+                              _paymentSettings?['promptpay_number']?.toString();
+
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            barrierDismissible: true,
+                            builder: (dialogContext) {
+                              final screenH = MediaQuery.of(
+                                dialogContext,
+                              ).size.height;
+                              final screenW = MediaQuery.of(
+                                dialogContext,
+                              ).size.width;
+                              final dialogH = screenH * 0.9;
+                              final dialogW = screenW < 520 ? screenW : 520.0;
+
+                              return StatefulBuilder(
+                                builder: (context, setDialogState) {
+                                  return Dialog(
+                                    insetPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 24,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: SizedBox(
+                                      width: dialogW,
+                                      height: dialogH,
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Column(
+                                          children: [
+                                            const Text(
+                                              'QR Code ชำระเงิน',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 12),
+                                            Expanded(
+                                              child: SingleChildScrollView(
+                                                child: Column(
+                                                  children: [
+                                                    const Text(
+                                                      'ยอดชำระทั้งหมด',
+                                                      style: TextStyle(
+                                                        fontSize: 16,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    Text(
+                                                      FormatHelper.formatPrice(
+                                                        total,
+                                                      ),
+                                                      style: const TextStyle(
+                                                        fontSize: 28,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: Color(
+                                                          0xFF3ABDC5,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 20),
+
+                                                    // แสดง QR Code จริงจาก database
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                            16,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.white,
+                                                        border: Border.all(
+                                                          color: Colors.grey,
+                                                          width: 2,
+                                                        ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              12,
+                                                            ),
+                                                      ),
+                                                      child:
+                                                          qrImageUrl != null &&
+                                                              qrImageUrl
+                                                                  .isNotEmpty
+                                                          ? Image.network(
+                                                              qrImageUrl,
+                                                              width: 240,
+                                                              height: 240,
+                                                              fit: BoxFit
+                                                                  .contain,
+                                                              errorBuilder:
+                                                                  (
+                                                                    _,
+                                                                    __,
+                                                                    ___,
+                                                                  ) => const Icon(
+                                                                    Icons
+                                                                        .qr_code_2,
+                                                                    size: 160,
+                                                                    color: Color(
+                                                                      0xFF3ABDC5,
+                                                                    ),
+                                                                  ),
+                                                            )
+                                                          : const Icon(
+                                                              Icons.qr_code_2,
+                                                              size: 160,
+                                                              color: Color(
+                                                                0xFF3ABDC5,
+                                                              ),
+                                                            ),
+                                                    ),
+
+                                                    const SizedBox(height: 16),
+                                                    Text(
+                                                      promptpayName,
+                                                      style: const TextStyle(
+                                                        fontSize: 16,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                    if (promptpayNumber !=
+                                                        null) ...[
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        'พร้อมเพย์: $promptpayNumber',
+                                                        style: const TextStyle(
+                                                          fontSize: 14,
+                                                          color: Colors.black54,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                    const SizedBox(height: 20),
+                                                    const Text(
+                                                      'กรุณาสแกน QR Code เพื่อชำระเงิน',
+                                                      style: TextStyle(
+                                                        fontSize: 14,
+                                                        color: Colors.black54,
+                                                      ),
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                    ),
+
+                                                    const SizedBox(height: 16),
+                                                    const Divider(),
+                                                    const SizedBox(height: 12),
+                                                    const Text(
+                                                      'แนบสลิปการชำระเงิน',
+                                                      style: TextStyle(
+                                                        fontSize: 16,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 10),
+                                                    if (selectedSlip != null)
+                                                      Container(
+                                                        width: 220,
+                                                        height: 320,
+                                                        decoration: BoxDecoration(
+                                                          border: Border.all(
+                                                            color: Colors.grey,
+                                                          ),
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
+                                                        ),
+                                                        child: ClipRRect(
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
+                                                          child: Image.file(
+                                                            selectedSlip!,
+                                                            fit: BoxFit.cover,
+                                                          ),
+                                                        ),
+                                                      )
+                                                    else
+                                                      Container(
+                                                        width: 220,
+                                                        height: 120,
+                                                        decoration: BoxDecoration(
+                                                          border: Border.all(
+                                                            color: Colors.grey,
+                                                          ),
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
+                                                          color:
+                                                              Colors.grey[200],
+                                                        ),
+                                                        child: const Center(
+                                                          child: Text(
+                                                            'ยังไม่ได้แนบสลิป',
+                                                            style: TextStyle(
+                                                              color: Colors
+                                                                  .black54,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    const SizedBox(height: 12),
+                                                    if (!isUploadingSlip)
+                                                      ElevatedButton.icon(
+                                                        onPressed: () async {
+                                                          final XFile?
+                                                          picked = await picker
+                                                              .pickImage(
+                                                                source:
+                                                                    ImageSource
+                                                                        .gallery,
+                                                                maxWidth: 1920,
+                                                                maxHeight: 1920,
+                                                                imageQuality:
+                                                                    85,
+                                                              );
+                                                          if (picked != null) {
+                                                            setDialogState(() {
+                                                              selectedSlip =
+                                                                  File(
+                                                                    picked.path,
+                                                                  );
+                                                              dialogError =
+                                                                  null;
+                                                            });
+                                                          }
+                                                        },
+                                                        icon: const Icon(
+                                                          Icons.image,
+                                                        ),
+                                                        label: Text(
+                                                          selectedSlip == null
+                                                              ? 'เลือกรูปสลิป'
+                                                              : 'เปลี่ยนรูปสลิป',
+                                                        ),
+                                                        style:
+                                                            ElevatedButton.styleFrom(
+                                                              backgroundColor:
+                                                                  const Color(
+                                                                    0xFF3ABDC5,
+                                                                  ),
+                                                              foregroundColor:
+                                                                  Colors.white,
+                                                            ),
+                                                      )
+                                                    else
+                                                      const Padding(
+                                                        padding:
+                                                            EdgeInsets.only(
+                                                              top: 8,
+                                                            ),
+                                                        child: Column(
+                                                          children: [
+                                                            CircularProgressIndicator(),
+                                                            SizedBox(height: 8),
+                                                            Text(
+                                                              'กำลังอัปโหลดสลิป...',
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+
+                                            if (dialogError != null) ...[
+                                              const SizedBox(height: 10),
+                                              Container(
+                                                width: double.infinity,
+                                                padding: const EdgeInsets.all(
+                                                  12,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red.withValues(
+                                                    alpha: 0.08,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  border: Border.all(
+                                                    color: Colors.red
+                                                        .withValues(alpha: 0.4),
+                                                  ),
+                                                ),
+                                                child: ConstrainedBox(
+                                                  constraints:
+                                                      const BoxConstraints(
+                                                        maxHeight: 80,
+                                                      ),
+                                                  child: SingleChildScrollView(
+                                                    child: Text(
+                                                      dialogError!,
+                                                      style: const TextStyle(
+                                                        color: Colors.red,
+                                                        fontSize: 13,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                            const SizedBox(height: 12),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: OutlinedButton(
+                                                    onPressed: isUploadingSlip
+                                                        ? null
+                                                        : () => Navigator.of(
+                                                            dialogContext,
+                                                          ).pop(false),
+                                                    style: OutlinedButton.styleFrom(
+                                                      foregroundColor:
+                                                          Colors.grey,
+                                                      side: const BorderSide(
+                                                        color: Colors.grey,
+                                                      ),
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            vertical: 12,
+                                                          ),
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                    child: const Text('ยกเลิก'),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: ElevatedButton(
+                                                    onPressed: isUploadingSlip
+                                                        ? null
+                                                        : () async {
+                                                            if (cartIdForPayment ==
+                                                                    null ||
+                                                                cartIdForPayment
+                                                                    .isEmpty) {
+                                                              setDialogState(() {
+                                                                dialogError =
+                                                                    'ไม่พบรหัสตะกร้า';
+                                                              });
+                                                              return;
+                                                            }
+                                                            if (selectedSlip ==
+                                                                null) {
+                                                              setDialogState(() {
+                                                                dialogError =
+                                                                    'กรุณาแนบสลิปก่อนยืนยัน';
+                                                              });
+                                                              return;
+                                                            }
+                                                            setDialogState(() {
+                                                              isUploadingSlip =
+                                                                  true;
+                                                              dialogError =
+                                                                  null;
+                                                            });
+                                                            try {
+                                                              final imageUrl =
+                                                                  await ApiServices.uploadUserFiles(
+                                                                    selectedSlip!,
+                                                                    subfolder:
+                                                                        'payment-slips',
+                                                                  );
+                                                              if (imageUrl
+                                                                  .isEmpty) {
+                                                                throw Exception(
+                                                                  'อัปโหลดสลิปไม่สำเร็จ',
+                                                                );
+                                                              }
+                                                              final updateUrl =
+                                                                  Uri.parse(
+                                                                    '${ApiConfig.baseUrl}/rest/v1/carts?id=eq.$cartIdForPayment',
+                                                                  );
+                                                              final token =
+                                                                  Session
+                                                                      .instance
+                                                                      .accessToken ??
+                                                                  ApiConfig
+                                                                      .apiKey;
+                                                              final headers = {
+                                                                'apikey':
+                                                                    ApiConfig
+                                                                        .apiKey,
+                                                                'Authorization':
+                                                                    'Bearer $token',
+                                                                'Content-Type':
+                                                                    'application/json',
+                                                              };
+                                                              final body = jsonEncode({
+                                                                'payment_slip_url':
+                                                                    imageUrl,
+                                                                'status':
+                                                                    'PAID',
+                                                                'paid_at':
+                                                                    DateTime.now()
+                                                                        .toIso8601String(),
+                                                                'updated_at':
+                                                                    DateTime.now()
+                                                                        .toIso8601String(),
+                                                              });
+                                                              final resp =
+                                                                  await http.patch(
+                                                                    updateUrl,
+                                                                    headers:
+                                                                        headers,
+                                                                    body: body,
+                                                                  );
+                                                              if (resp.statusCode ==
+                                                                      200 ||
+                                                                  resp.statusCode ==
+                                                                      204) {
+                                                                // แจ้งเตือน admin ว่ามีการชำระเงินแล้ว
+                                                                ApiServices.notifyAdminsPayment(
+                                                                  cartId:
+                                                                      cartIdForPayment,
+                                                                  totalAmount:
+                                                                      total,
+                                                                  slipUrl:
+                                                                      imageUrl,
+                                                                );
+                                                                // แจ้งเตือนผู้ใช้ (push notification)
+                                                                await ApiServices.sendPushNotificationToUser(
+                                                                  userId:
+                                                                      Session
+                                                                          .instance
+                                                                          .user?['id'] ??
+                                                                      '',
+                                                                  title:
+                                                                      'แจ้งเตือนการชำระเงิน',
+                                                                  body:
+                                                                      'ระบบได้รับข้อมูลการชำระเงินของคุณแล้ว',
+                                                                );
+                                                                if (dialogContext
+                                                                    .mounted) {
+                                                                  Navigator.of(
+                                                                    dialogContext,
+                                                                  ).pop(true);
+                                                                }
+                                                              } else {
+                                                                throw Exception(
+                                                                  'บันทึกสลิปไม่สำเร็จ (${resp.statusCode}) ${resp.body}',
+                                                                );
+                                                              }
+                                                            } catch (e) {
+                                                              if (kDebugMode) {
+                                                                print(
+                                                                  '[CartPage] upload slip error: $e',
+                                                                );
+                                                              }
+                                                              setDialogState(() {
+                                                                isUploadingSlip =
+                                                                    false;
+                                                                dialogError =
+                                                                    'เกิดข้อผิดพลาด: $e';
+                                                              });
+                                                            }
+                                                          },
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor:
+                                                          const Color(
+                                                            0xFF3ABDC5,
+                                                          ),
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                      ),
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            vertical: 12,
+                                                          ),
+                                                    ),
+                                                    child: const Text(
+                                                      'ยืนยันการชำระเงิน',
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    )
-                                  : const Icon(Icons.qr_code_2, size: 120, color: Color(0xFF3ABDC5)),
-                            ),
-                            
-                            const SizedBox(height: 16),
-                            Text(
-                              promptpayName,
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                            if (promptpayNumber != null) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                'พร้อมเพย์: $promptpayNumber',
-                                style: const TextStyle(fontSize: 14, color: Colors.black54),
-                              ),
-                            ],
-                            const SizedBox(height: 20),
-                            const Text(
-                              'กรุณาสแกน QR Code เพื่อชำระเงิน',
-                              style: TextStyle(fontSize: 14, color: Colors.black54),
-                            ),
-                          ],
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('ยกเลิก', style: TextStyle(color: Colors.grey)),
-                          ),
-                          ElevatedButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF3ABDC5),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                            ),
-                            child: const Text('ยืนยันการชำระเงิน', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          ),
-                        ],
-                      ),
-                    );
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          );
 
-                    if (confirmed == true && cartItems.isNotEmpty) {
-                      // เปลี่ยนสถานะ cart เป็น 'paid'
-                      final cartId = cartItems.first['cart_id'];
-                      if (cartId != null && cartId.toString().isNotEmpty) {
-                        try {
-                          final success = await ApiServices.updateCartStatus(cartId.toString(), 'paid');
-                          if (success) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('ชำระเงินเรียบร้อย'), backgroundColor: Colors.green),
-                            );
-                            _loadCartItems();
-                            
-                            // ✅ เพิ่มบรรทัดนี้เพื่ออัปเดต badge ใน MainLayout
-                            MainLayout.of(context)?.refreshCartCount();
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('ชำระเงินไม่สำเร็จ'), backgroundColor: Colors.red),
+                          if (!mounted) return;
+
+                          if (kDebugMode) {
+                            print(
+                              '[CartPage] QR dialog result confirmed=$confirmed cartId=$cartIdForPayment',
                             );
                           }
-                        } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red),
-                          );
-                        }
-                      }
-                    }
-                  },
+
+                          if (confirmed == true) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('ชำระเงินเรียบร้อย'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                            _loadCartItems();
+                            MainLayout.of(context)?.refreshCartCount();
+                          }
+                        },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.payment, color: Colors.white, size: 24),
+                        const Icon(
+                          Icons.payment,
+                          color: Colors.white,
+                          size: 24,
+                        ),
                         const SizedBox(width: 12),
                         Text(
-                          cartItems.isEmpty ? 'ตะกร้าว่าง' : 'ชำระเงิน ${FormatHelper.formatPrice(total)}',
+                          cartItems.isEmpty
+                              ? 'ตะกร้าว่าง'
+                              : 'ชำระเงิน ${FormatHelper.formatPrice(total)}',
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,

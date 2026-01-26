@@ -214,7 +214,8 @@ class RegisterPageState extends State<RegisterPage> {
             );
 
             // แก้ตรงนี้ให้ตรงกัน: subdistrict <- subdistrictNameTh, province <- provinceNameTh
-            _subdistrictController.text = selected['subdistrictNameTh'].toString();
+            _subdistrictController.text = selected['subdistrictNameTh']
+                .toString();
             _districtController.text = selected['districtNameTh'].toString();
             _provinceController.text = selected['provinceNameTh'].toString();
             _postalCodeController.text = selected['postalCode'].toString();
@@ -467,10 +468,15 @@ class RegisterPageState extends State<RegisterPage> {
 
                             // ตรวจสอบ checkbox ก่อน validate อื่นๆ
                             if (!_acceptTerms) {
-                              Navigator.of(context, rootNavigator: true).pop(); // ปิด loading
+                              Navigator.of(
+                                context,
+                                rootNavigator: true,
+                              ).pop(); // ปิด loading
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('กรุณายอมรับเงื่อนไขก่อนดำเนินการต่อ'),
+                                  content: Text(
+                                    'กรุณายอมรับเงื่อนไขก่อนดำเนินการต่อ',
+                                  ),
                                   backgroundColor: Colors.red,
                                 ),
                               );
@@ -511,7 +517,10 @@ class RegisterPageState extends State<RegisterPage> {
                                 );
 
                             if (validatetionMessage != '') {
-                              Navigator.of(context, rootNavigator: true).pop(); // ปิด loading
+                              Navigator.of(
+                                context,
+                                rootNavigator: true,
+                              ).pop(); // ปิด loading
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(validatetionMessage),
@@ -532,12 +541,10 @@ class RegisterPageState extends State<RegisterPage> {
                                   await ApiServices.uploadUserFiles(
                                     _idCardImage!,
                                   ),
-                              faceImagePath:
-                                  await ApiServices.uploadUserFiles(
-                                    _faceImage!,
-                                  ),
-                              idCardNumber: _idCardNumberController.text
-                                  .trim(),
+                              faceImagePath: await ApiServices.uploadUserFiles(
+                                _faceImage!,
+                              ),
+                              idCardNumber: _idCardNumberController.text.trim(),
                               address: _addressController.text.trim(),
                               subdistrict: _subdistrictController.text.trim(),
                               district: _districtController.text.trim(),
@@ -550,6 +557,14 @@ class RegisterPageState extends State<RegisterPage> {
                             Navigator.of(context, rootNavigator: true).pop();
 
                             if (res.responseCode == 'SUCCESS') {
+                              // best-effort: แจ้งเตือน admin ว่ามีผู้ใช้สมัครใหม่
+                              ApiServices.notifyAdminsNewUser(
+                                userId: (res.user ?? '').toString(),
+                                email: _emailController.text.trim(),
+                                name: _nameController.text.trim(),
+                                surname: _surnameController.text.trim(),
+                              );
+
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(res.responseMessage),
@@ -559,9 +574,18 @@ class RegisterPageState extends State<RegisterPage> {
 
                               // แทนที่ค่าจริงใน HTML template
                               final htmlContent = htmlRegisterSucess
-                                  .replaceAll('{{customer_name}}', '${_nameController.text.trim()} ${_surnameController.text.trim()}')
-                                  .replaceAll('{{username}}', _emailController.text.trim())
-                                  .replaceAll('{{password}}', _passwordController.text.trim());
+                                  .replaceAll(
+                                    '{{customer_name}}',
+                                    '${_nameController.text.trim()} ${_surnameController.text.trim()}',
+                                  )
+                                  .replaceAll(
+                                    '{{username}}',
+                                    _emailController.text.trim(),
+                                  )
+                                  .replaceAll(
+                                    '{{password}}',
+                                    _passwordController.text.trim(),
+                                  );
 
                               // ส่งอีเมลยืนยันการสมัครสมาชิก
                               EmailServices.sendEmailViaEdgeFunction(

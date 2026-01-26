@@ -2,9 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:powershare/preloadPage.dart';
+import 'package:powershare/services/notificationService.dart';
+import 'package:firebase_core/firebase_core.dart';
+// import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized(); // สำคัญมากๆ
+
+  await Firebase.initializeApp();
+
+  // await Supabase.initialize(url: ApiConfig.baseUrl, anonKey: ApiConfig.apiKey);
+
+  try {
+    await NotificationService.init();
+  } catch (e) {
+    // ถ้ายังไม่ได้ตั้งค่า Firebase (google-services.json / GoogleService-Info.plist)
+    // จะ init ไม่ผ่าน แต่ยังให้แอปเปิดได้ตามปกติ
+  }
   // 🔒 ล็อกเฉพาะแนวตั้ง
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,

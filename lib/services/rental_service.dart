@@ -6,7 +6,9 @@ import 'package:powershare/services/session.dart';
 
 class RentalService {
   /// ดึงประวัติการเช่าของผู้ใช้ (จาก carts ที่ status = 'paid')
-  static Future<List<Map<String, dynamic>>> getRentalHistory(String userId) async {
+  static Future<List<Map<String, dynamic>>> getRentalHistory(
+    String userId,
+  ) async {
     try {
       final token = Session.instance.accessToken ?? ApiConfig.apiKey;
       final headers = {
@@ -15,15 +17,18 @@ class RentalService {
         'Content-Type': 'application/json',
       };
 
-      // ดึง carts ที่ status = 'paid' ของ user
+      // ดึง carts ที่ status = 'PAID' ของ user
       final cartUrl = Uri.parse(
-        '${ApiConfig.baseUrl}/rest/v1/carts?user_id=eq.$userId&status=eq.paid&order=paid_at.desc,created_at.desc'
+        '${ApiConfig.baseUrl}/rest/v1/carts?user_id=eq.$userId&status=eq.PAID&order=paid_at.desc,created_at.desc',
       );
-      
+
       if (kDebugMode) print('getRentalHistory: GET $cartUrl');
       final cartResp = await http.get(cartUrl, headers: headers);
-      if (kDebugMode) print('getRentalHistory: status=${cartResp.statusCode} body=${cartResp.body}');
-      
+      if (kDebugMode)
+        print(
+          'getRentalHistory: status=${cartResp.statusCode} body=${cartResp.body}',
+        );
+
       if (cartResp.statusCode != 200) return [];
 
       final List<dynamic> carts = jsonDecode(cartResp.body);
@@ -38,20 +43,22 @@ class RentalService {
 
         // ดึง cart_items ของ cart นี้
         final itemsUrl = Uri.parse(
-          '${ApiConfig.baseUrl}/rest/v1/cart_items?cart_id=eq.$cartId&select=*'
+          '${ApiConfig.baseUrl}/rest/v1/cart_items?cart_id=eq.$cartId&select=*',
         );
         final itemsResp = await http.get(itemsUrl, headers: headers);
-        
+
         if (itemsResp.statusCode == 200) {
           final List<dynamic> items = jsonDecode(itemsResp.body);
-          
+
           for (var item in items) {
             final productId = item['product_id']?.toString();
             Map<String, dynamic>? product;
 
             // ดึงข้อมูล product
             if (productId != null && productId.isNotEmpty) {
-              final prodUrl = Uri.parse('${ApiConfig.baseUrl}/rest/v1/products?id=eq.$productId');
+              final prodUrl = Uri.parse(
+                '${ApiConfig.baseUrl}/rest/v1/products?id=eq.$productId',
+              );
               final prodResp = await http.get(prodUrl, headers: headers);
               if (prodResp.statusCode == 200) {
                 final List<dynamic> prods = jsonDecode(prodResp.body);

@@ -28,4 +28,36 @@ class FormatHelper {
   static String formatDailyPrice(dynamic value, {int decimals = 2}) {
     return '${formatPrice(value, decimals: decimals)}/วัน';
   }
+
+  /// ฟอร์แมตวันที่เป็น DD/MM/yyyy HH:mm:ss
+  /// ตัวอย่าง: "2025-11-09T12:08:42" -> "09/11/2025 12:08:42"
+  static String formatDateTime(String? dateTimeString) {
+    if (dateTimeString == null || dateTimeString.isEmpty) {
+      return '-';
+    }
+    
+    try {
+      final dateTime = DateTime.parse(dateTimeString);
+      final formatter = DateFormat('dd/MM/yyyy HH:mm:ss');
+      return formatter.format(dateTime);
+    } catch (e) {
+      return dateTimeString;
+    }
+  }
+
+  /// ฟอร์แมตวันที่เป็น DD/MM/yyyy
+  /// ตัวอย่าง: "2025-11-09T12:08:42" -> "09/11/2025"
+  static String formatDate(String? dateTimeString) {
+    if (dateTimeString == null || dateTimeString.isEmpty) {
+      return '-';
+    }
+    
+    try {
+      final dateTime = DateTime.parse(dateTimeString);
+      final formatter = DateFormat('dd/MM/yyyy');
+      return formatter.format(dateTime);
+    } catch (e) {
+      return dateTimeString;
+    }
+  }
 }

@@ -60,18 +60,18 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         final product = await ApiServices.getProductById(widget.productId!);
         if (mounted && product != null) {
           setState(() {
-            _productStatus = product['last_status']?.toString() ?? 'Available';
+            _productStatus = product['last_status']?.toString() ?? 'AVAILABLE';
             _loadingStatus = false;
           });
         } else if (mounted) {
           setState(() {
-            _productStatus = 'Available'; // default
+            _productStatus = 'AVAILABLE'; // default
             _loadingStatus = false;
           });
         }
       } else {
         setState(() {
-          _productStatus = 'Available'; // default
+          _productStatus = 'AVAILABLE'; // default
           _loadingStatus = false;
         });
       }
@@ -79,7 +79,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       if (kDebugMode) print('loadProductStatus error: $e');
       if (mounted) {
         setState(() {
-          _productStatus = 'Available';
+          _productStatus = 'AVAILABLE';
           _loadingStatus = false;
         });
       }
@@ -95,13 +95,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       final ids = await ApiServices.getUserLikedProductIds(userId);
       if (!mounted) return;
 
-      final pid = (widget.productId != null && widget.productId!.isNotEmpty) ? widget.productId! : widget.name;
+      final pid = (widget.productId != null && widget.productId!.isNotEmpty)
+          ? widget.productId!
+          : widget.name;
       setState(() {
         isLiked = ids.contains(pid);
       });
 
       if (kDebugMode) {
-        debugPrint('ProductDetailPage: userId=$userId, productId=$pid, liked=$isLiked');
+        debugPrint(
+          'ProductDetailPage: userId=$userId, productId=$pid, liked=$isLiked',
+        );
       }
     } catch (e) {
       if (kDebugMode) debugPrint('ProductDetailPage _initLikeState error: $e');
@@ -112,19 +116,25 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final user = Session.instance.user;
     if (user == null || user['id'] == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาเข้าสู่ระบบก่อนทำรายการ')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('กรุณาเข้าสู่ระบบก่อนทำรายการ')),
+        );
       }
       return;
     }
     final userId = user['id'].toString();
-    final productId = (widget.productId != null && widget.productId!.isNotEmpty) ? widget.productId! : widget.name;
+    final productId = (widget.productId != null && widget.productId!.isNotEmpty)
+        ? widget.productId!
+        : widget.name;
 
     setState(() {
       isLiked = !isLiked;
     });
 
     if (kDebugMode) {
-      debugPrint('_toggleLike: userId=$userId, productId=$productId, newState=$isLiked, tokenLen=${Session.instance.accessToken?.length ?? 0}');
+      debugPrint(
+        '_toggleLike: userId=$userId, productId=$productId, newState=$isLiked, tokenLen=${Session.instance.accessToken?.length ?? 0}',
+      );
     }
 
     try {
@@ -140,7 +150,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           isLiked = !isLiked;
         });
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง')),
+          );
         }
       } else {
         if (kDebugMode) debugPrint('_toggleLike: success');
@@ -151,7 +163,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       });
       if (kDebugMode) debugPrint('_toggleLike error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('เกิดข้อผิดพลาด ลองใหม่อีกครั้ง')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('เกิดข้อผิดพลาด ลองใหม่อีกครั้ง')),
+        );
       }
     }
   }
@@ -205,19 +219,19 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
   double get _totalPrice => _dailyRate * _rentalDays;
 
-  bool get _isAvailable => _productStatus == 'Available';
+  bool get _isAvailable => _productStatus == 'AVAILABLE';
 
   String _getStatusText(String status) {
     switch (status) {
-      case 'Available':
+      case 'AVAILABLE':
         return 'พร้อมให้เช่า';
-      case 'Reserved':
+      case 'RESERVED':
         return 'สินค้ากำลังถูกจอง';
-      case 'Rented':
+      case 'RENTED':
         return 'สินค้ากำลังถูกเช่าอยู่';
-      case 'Maintenance':
+      case 'MAINTENANCE':
         return 'สินค้าอยู่ระหว่างซ่อมบำรุง';
-      case 'Unavailable':
+      case 'UNAVAILABLE':
         return 'สินค้าไม่พร้อมให้บริการ';
       default:
         return status;
@@ -226,15 +240,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'Available':
+      case 'AVAILABLE':
         return Colors.green;
-      case 'Reserved':
+      case 'RESERVED':
         return Colors.orange;
-      case 'Rented':
+      case 'RENTED':
         return Colors.red;
-      case 'Maintenance':
+      case 'MAINTENANCE':
         return Colors.blue;
-      case 'Unavailable':
+      case 'UNAVAILABLE':
         return Colors.grey;
       default:
         return Colors.grey;
@@ -318,25 +332,47 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(widget.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                        Text(
+                          widget.name,
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(height: 8),
-                        Text(widget.price, style: const TextStyle(fontSize: 20, color: Color(0xFF3ABDC5), fontWeight: FontWeight.bold)),
+                        Text(
+                          widget.price,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            color: Color(0xFF3ABDC5),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(height: 8),
-                        
+
                         // แสดงสถานะสินค้า
                         if (_productStatus != null)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
-                              color: _getStatusColor(_productStatus!).withValues(alpha: 0.1),
+                              color: _getStatusColor(
+                                _productStatus!,
+                              ).withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: _getStatusColor(_productStatus!)),
+                              border: Border.all(
+                                color: _getStatusColor(_productStatus!),
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  _isAvailable ? Icons.check_circle : Icons.info,
+                                  _isAvailable
+                                      ? Icons.check_circle
+                                      : Icons.info,
                                   size: 16,
                                   color: _getStatusColor(_productStatus!),
                                 ),
@@ -351,16 +387,21 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                               ],
                             ),
                           ),
-                        
+
                         const SizedBox(height: 16),
-                        Text(widget.description, style: TextStyle(color: Colors.grey[800])),
+                        Text(
+                          widget.description,
+                          style: TextStyle(color: Colors.grey[800]),
+                        ),
                         const SizedBox(height: 24),
 
                         // ช่วงวันที่เช่า (แสดงเฉพาะถ้า Available)
                         if (_isAvailable)
                           Card(
                             elevation: 2,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                             child: InkWell(
                               onTap: _pickDateRange,
                               borderRadius: BorderRadius.circular(8),
@@ -368,24 +409,42 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                                 padding: const EdgeInsets.all(16),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.calendar_today, color: Color(0xFF3ABDC5)),
+                                    const Icon(
+                                      Icons.calendar_today,
+                                      color: Color(0xFF3ABDC5),
+                                    ),
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          const Text('ช่วงวันที่เช่า', style: TextStyle(fontSize: 14, color: Colors.grey)),
+                                          const Text(
+                                            'ช่วงวันที่เช่า',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            _rentStart != null && _rentEnd != null
+                                            _rentStart != null &&
+                                                    _rentEnd != null
                                                 ? '${_rentStart!.day}/${_rentStart!.month}/${_rentStart!.year + 543} - ${_rentEnd!.day}/${_rentEnd!.month}/${_rentEnd!.year + 543} ($_rentalDays วัน)'
                                                 : 'เลือกวันที่',
-                                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w500,
+                                            ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                    const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                                    const Icon(
+                                      Icons.arrow_forward_ios,
+                                      size: 16,
+                                      color: Colors.grey,
+                                    ),
                                   ],
                                 ),
                               ),
@@ -395,7 +454,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                         if (_isAvailable) const SizedBox(height: 16),
 
                         // สรุปราคา (แสดงเฉพาะถ้า Available และเลือกวันแล้ว)
-                        if (_isAvailable && _rentStart != null && _rentEnd != null)
+                        if (_isAvailable &&
+                            _rentStart != null &&
+                            _rentEnd != null)
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
@@ -405,28 +466,53 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                             child: Column(
                               children: [
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    const Text('ราคาต่อวัน:', style: TextStyle(fontSize: 16)),
-                                    Text(FormatHelper.formatPrice(_dailyRate), style: const TextStyle(fontSize: 16)),
+                                    const Text(
+                                      'ราคาต่อวัน:',
+                                      style: TextStyle(fontSize: 16),
+                                    ),
+                                    Text(
+                                      FormatHelper.formatPrice(_dailyRate),
+                                      style: const TextStyle(fontSize: 16),
+                                    ),
                                   ],
                                 ),
                                 const SizedBox(height: 8),
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    const Text('จำนวนวัน:', style: TextStyle(fontSize: 16)),
-                                    Text('$_rentalDays วัน', style: const TextStyle(fontSize: 16)),
+                                    const Text(
+                                      'จำนวนวัน:',
+                                      style: TextStyle(fontSize: 16),
+                                    ),
+                                    Text(
+                                      '$_rentalDays วัน',
+                                      style: const TextStyle(fontSize: 16),
+                                    ),
                                   ],
                                 ),
                                 const Divider(height: 24),
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    const Text('ยอดรวม:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                    const Text(
+                                      'ยอดรวม:',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                     Text(
                                       FormatHelper.formatPrice(_totalPrice),
-                                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF3ABDC5)),
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF3ABDC5),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -447,21 +533,45 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                                   onPressed: () async {
                                     final user = Session.instance.user;
                                     if (user == null || user['id'] == null) {
-                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาเข้าสู่ระบบ')));
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('กรุณาเข้าสู่ระบบ'),
+                                        ),
+                                      );
                                       return;
                                     }
 
-                                    if (_rentStart == null || _rentEnd == null) {
-                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาเลือกช่วงวันที่เช่า')));
+                                    if (_rentStart == null ||
+                                        _rentEnd == null) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'กรุณาเลือกช่วงวันที่เช่า',
+                                          ),
+                                        ),
+                                      );
                                       return;
                                     }
 
-                                    if (kDebugMode) debugPrint('addToCart: session.user = $user');
+                                    if (kDebugMode)
+                                      debugPrint(
+                                        'addToCart: session.user = $user',
+                                      );
 
                                     final userId = user['id'].toString();
                                     final pid = widget.productId ?? '';
                                     if (pid.isEmpty) {
-                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ไม่พบรหัสสินค้านี้')));
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('ไม่พบรหัสสินค้านี้'),
+                                        ),
+                                      );
                                       return;
                                     }
 
@@ -470,38 +580,73 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                                         'product_id': pid,
                                         'quantity': 1,
                                         'unit_price': _dailyRate,
-                                        'rent_start': _rentStart!.toIso8601String().split('T')[0],
-                                        'rent_end': _rentEnd!.toIso8601String().split('T')[0],
+                                        'rent_start': _rentStart!
+                                            .toIso8601String()
+                                            .split('T')[0],
+                                        'rent_end': _rentEnd!
+                                            .toIso8601String()
+                                            .split('T')[0],
                                         'rental_days': _rentalDays,
-                                      }
+                                      },
                                     ];
 
-                                    final ok = await ApiServices.addToCart(userId, items);
+                                    final ok = await ApiServices.addToCart(
+                                      userId,
+                                      items,
+                                    );
 
                                     if (ok) {
-                                      ProductNotifier.instance.notifyProductChanged();
-                                      MainLayout.of(context)?.refreshCartCount();
+                                      ProductNotifier.instance
+                                          .notifyProductChanged();
+                                      MainLayout.of(
+                                        context,
+                                      )?.refreshCartCount();
                                       if (!mounted) return;
-                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('เพิ่มลงตะกร้าแล้ว'), duration: Duration(seconds: 1)));
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('เพิ่มลงตะกร้าแล้ว'),
+                                          duration: Duration(seconds: 1),
+                                        ),
+                                      );
                                       // กลับไปหน้า Home และ clear navigation stack
-                                      await Future.delayed(const Duration(milliseconds: 300));
+                                      await Future.delayed(
+                                        const Duration(milliseconds: 300),
+                                      );
                                       if (!mounted) return;
                                       Navigator.pushReplacement(
                                         context,
-                                        MaterialPageRoute(builder: (context) => const MainLayout(currentIndex: 0)),
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              const MainLayout(currentIndex: 0),
+                                        ),
                                       );
                                     } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ไม่สามารถเพิ่มลงตะกร้าได้')));
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'ไม่สามารถเพิ่มลงตะกร้าได้',
+                                          ),
+                                        ),
+                                      );
                                     }
                                   },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF3ABDC5),
                                     foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
                                   ),
                                   child: const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 14),
-                                    child: Text('เช่าสินค้า', style: TextStyle(fontSize: 18)),
+                                    child: Text(
+                                      'เช่าสินค้า',
+                                      style: TextStyle(fontSize: 18),
+                                    ),
                                   ),
                                 ),
                               ),
