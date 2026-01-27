@@ -14,6 +14,43 @@ class ReservationApprovalPage extends StatefulWidget {
 }
 
 class _ReservationApprovalPageState extends State<ReservationApprovalPage> {
+  // สินค้าครบกำหนดส่งคืน
+  Widget _buildDueReturnReservations(List<Map<String, dynamic>> dueReturns) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (dueReturns.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.assignment_late, size: 64, color: Colors.orange[400]),
+            const SizedBox(height: 16),
+            Text(
+              'ไม่มีสินค้าครบกำหนดส่งคืน',
+              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadReservations,
+      child: ListView.builder(
+        itemCount: dueReturns.length,
+        padding: const EdgeInsets.all(12),
+        itemBuilder: (context, index) {
+          final reservation = dueReturns[index];
+          return _buildReservationCard(
+            context,
+            reservation,
+            showReturnButton: true,
+          );
+        },
+      ),
+    );
+  }
+
   List<Map<String, dynamic>> reservations = [];
   bool _loading = true;
 
@@ -50,21 +87,19 @@ class _ReservationApprovalPageState extends State<ReservationApprovalPage> {
     setState(() => _loading = true);
     try {
       final res = await ApiServices.getReservations();
-      if (mounted) {
-        if (kDebugMode) {
-          print('=== DEBUG ReservationApprovalPage ===');
-          print('Loaded reservations: ${res.length}');
-          for (var i = 0; i < res.length; i++) {
-            print(
-              '[$i] id: ${res[i]['id']}, product: ${res[i]['product']}, cart_item: ${res[i]['cart_item']}',
-            );
-          }
+      if (kDebugMode) {
+        print('=== DEBUG ReservationApprovalPage ===');
+        print('Loaded reservations: [1m${res.length}[0m');
+        for (var i = 0; i < res.length; i++) {
+          print(
+            '[$i] id: ${res[i]['id']}, product: ${res[i]['product']}, cart_item: ${res[i]['cart_item']}',
+          );
         }
-        setState(() {
-          reservations = res;
-          _loading = false;
-        });
       }
+      setState(() {
+        reservations = res;
+        _loading = false;
+      });
     } catch (e) {
       if (kDebugMode) print('loadReservations error: $e');
       if (mounted) {
@@ -96,10 +131,33 @@ class _ReservationApprovalPageState extends State<ReservationApprovalPage> {
       return status == 'RESERVED';
     }).toList();
 
+    final now = DateTime.now();
+    // อนุมัติแล้ว: RENTED และยังไม่เลยกำหนด (rent_end > วันนี้)
     final approvedReservations = reservations.where((r) {
       final cartItem = r['cart_item'] as Map<String, dynamic>?;
       final status = cartItem?['status']?.toString();
-      return status == 'RENTED';
+      final rentEndStr = cartItem?['rent_end']?.toString();
+      if (status != 'RENTED' || rentEndStr == null) return false;
+      try {
+        final rentEnd = DateTime.parse(rentEndStr);
+        return rentEnd.isAfter(now);
+      } catch (_) {
+        return false;
+      }
+    }).toList();
+
+    // ครบกำหนดคืน: RENTED และเลยกำหนด (rent_end <= วันนี้)
+    final dueReturnReservations = reservations.where((r) {
+      final cartItem = r['cart_item'] as Map<String, dynamic>?;
+      final status = cartItem?['status']?.toString();
+      final rentEndStr = cartItem?['rent_end']?.toString();
+      if (status != 'RENTED' || rentEndStr == null) return false;
+      try {
+        final rentEnd = DateTime.parse(rentEndStr);
+        return !rentEnd.isAfter(now);
+      } catch (_) {
+        return false;
+      }
     }).toList();
 
     final rejectedReservations = reservations.where((r) {
@@ -107,9 +165,8 @@ class _ReservationApprovalPageState extends State<ReservationApprovalPage> {
       final status = cartItem?['status']?.toString();
       return _isRejectStatus(status);
     }).toList();
-
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('อนุมัติการจอง'),
@@ -144,6 +201,16 @@ class _ReservationApprovalPageState extends State<ReservationApprovalPage> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    const Text('ครบกำหนดคืน'),
+                    const SizedBox(width: 6),
+                    _buildCountBadge(dueReturnReservations.length),
+                  ],
+                ),
+              ),
+              Tab(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     const Text('ปฏิเสธ'),
                     const SizedBox(width: 6),
                     _buildCountBadge(rejectedReservations.length),
@@ -159,6 +226,8 @@ class _ReservationApprovalPageState extends State<ReservationApprovalPage> {
             _buildPendingReservations(pendingReservations),
             // แท็บอนุมัติแล้ว
             _buildApprovedReservations(approvedReservations),
+            // แท็บครบกำหนดคืน
+            _buildDueReturnReservations(dueReturnReservations),
             // แท็บปฏิเสธ
             _buildRejectedReservations(rejectedReservations),
           ],
@@ -206,7 +275,7 @@ class _ReservationApprovalPageState extends State<ReservationApprovalPage> {
         padding: const EdgeInsets.all(12),
         itemBuilder: (context, index) {
           final reservation = pending[index];
-          return _buildReservationCard(context, reservation, isPending: true);
+          return _buildReservationCard(context, reservation);
         },
       ),
     );
@@ -240,7 +309,7 @@ class _ReservationApprovalPageState extends State<ReservationApprovalPage> {
         padding: const EdgeInsets.all(12),
         itemBuilder: (context, index) {
           final reservation = approved[index];
-          return _buildReservationCard(context, reservation, isPending: false);
+          return _buildReservationCard(context, reservation);
         },
       ),
     );
@@ -274,12 +343,7 @@ class _ReservationApprovalPageState extends State<ReservationApprovalPage> {
         padding: const EdgeInsets.all(12),
         itemBuilder: (context, index) {
           final reservation = rejected[index];
-          return _buildReservationCard(
-            context,
-            reservation,
-            isPending: false,
-            isRejected: true,
-          );
+          return _buildReservationCard(context, reservation);
         },
       ),
     );
@@ -288,36 +352,47 @@ class _ReservationApprovalPageState extends State<ReservationApprovalPage> {
   Widget _buildReservationCard(
     BuildContext context,
     Map<String, dynamic> reservation, {
-    required bool isPending,
-    bool isRejected = false,
+    bool showReturnButton = false,
   }) {
-    assert(!(isPending && isRejected));
-
-    // ดึง user info จาก reservation.user
+    // ดึงข้อมูลที่ต้องใช้จาก reservation
     final user = reservation['user'] as Map<String, dynamic>?;
+    final cartItem = reservation['cart_item'] as Map<String, dynamic>?;
     final userName = user != null
         ? '${user['name']?.toString() ?? ''} ${user['surname']?.toString() ?? ''}'
-              .trim()
-        : 'ผู้ใช้ไม่ระบุ';
-
-    final createdDate = reservation['created_at']?.toString() ?? '-';
-    final slipUrl = (reservation['payment_slip_url'] ?? '').toString();
-
-    // ดึงข้อมูล product และ cart_item
-    final product = reservation['product'] as Map<String, dynamic>? ?? {};
-    final cartItem = reservation['cart_item'] as Map<String, dynamic>? ?? {};
-
-    final productName = product['name']?.toString() ?? 'สินค้าไม่ระบุ';
-    final deliveryDate = cartItem['delivery_date']?.toString() ?? '-';
-    final rejectionReason =
-        cartItem['rejection_reson']?.toString() ??
-        cartItem['rejection_reason']?.toString() ??
-        cartItem['cancellation_reason']?.toString() ??
-        '-';
-
+        : '';
+    final product = reservation['product'];
+    String productName = '';
+    if (product is Map<String, dynamic>) {
+      productName = product['name']?.toString() ?? '';
+    } else if (product != null) {
+      productName = product.toString();
+    }
+    final status = cartItem?['status']?.toString() ?? '';
+    final isPending = status == 'RESERVED';
+    final isRejected = status.toUpperCase() == 'REJECT';
+    final rentStartStr = cartItem?['rent_start']?.toString();
+    final rentEndStr = cartItem?['rent_end']?.toString();
+    final rentStart = rentStartStr != null
+        ? DateTime.tryParse(rentStartStr)
+        : null;
+    final rentEnd = rentEndStr != null ? DateTime.tryParse(rentEndStr) : null;
+    final rentStartDate = rentStart;
+    final rentEndDate = rentEnd;
     final statusLabel = isPending
-        ? 'รอการอนุมัติ'
-        : (isRejected ? 'ปฏิเสธแล้ว' : 'อนุมัติแล้ว');
+        ? 'รออนุมัติ'
+        : isRejected
+        ? 'ปฏิเสธ'
+        : 'อนุมัติแล้ว';
+    final createdDateStr = reservation['created_at']?.toString();
+    final createdDate = createdDateStr != null
+        ? DateTime.tryParse(createdDateStr)
+        : null;
+    final deliveryDateStr = cartItem?['delivery_date']?.toString();
+    final deliveryDate = deliveryDateStr != null
+        ? DateTime.tryParse(deliveryDateStr)
+        : null;
+    final rejectionReason = cartItem?['rejection_reason']?.toString() ?? '-';
+    final slipUrl = cartItem?['slip_url']?.toString() ?? '';
 
     final statusColor = isPending
         ? Colors.orange
@@ -354,6 +429,21 @@ class _ReservationApprovalPageState extends State<ReservationApprovalPage> {
                             'ผู้จอง: $userName',
                             style: TextStyle(color: Colors.grey[600]),
                           ),
+                          if (isPending &&
+                              rentStartDate != null &&
+                              rentEndDate != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                'ช่วงวันที่เช่า: '
+                                '${FormatHelper.formatDate(rentStartDate.toIso8601String())} - '
+                                '${FormatHelper.formatDate(rentEndDate.toIso8601String())}',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.blueGrey,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -363,7 +453,7 @@ class _ReservationApprovalPageState extends State<ReservationApprovalPage> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.1),
+                        color: statusColor.withAlpha((0.1 * 255).toInt()),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: statusColor),
                       ),
@@ -390,19 +480,26 @@ class _ReservationApprovalPageState extends State<ReservationApprovalPage> {
                     children: [
                       _buildInfoRow(
                         'วันที่จอง:',
-                        FormatHelper.formatDateTime(createdDate),
+                        createdDate != null
+                            ? FormatHelper.formatDateTime(
+                                createdDate.toIso8601String(),
+                              )
+                            : '-',
                       ),
                       if (!isPending && !isRejected)
                         _buildInfoRow(
                           'วันส่ง:',
-                          FormatHelper.formatDateTime(deliveryDate),
+                          deliveryDate != null
+                              ? FormatHelper.formatDateTime(
+                                  deliveryDate.toIso8601String(),
+                                )
+                              : '-',
                         ),
                       if (isRejected)
                         _buildInfoRow('เหตุผลปฏิเสธ:', rejectionReason),
                     ],
                   ),
                 ),
-
                 if (slipUrl.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   const Text(
@@ -450,234 +547,315 @@ class _ReservationApprovalPageState extends State<ReservationApprovalPage> {
           if (isPending)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        _showRejectDialog(context, reservation);
-                      },
-                      icon: const Icon(Icons.close),
-                      label: const Text('ปฏิเสธ'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                      ),
+              child: (rentStart != null && rentStart.isAfter(DateTime.now()))
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              _showRejectDialog(context, reservation);
+                            },
+                            icon: const Icon(Icons.close),
+                            label: const Text('ปฏิเสธ'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              _showApprovalDialog(context, reservation);
+                            },
+                            icon: const Icon(Icons.check),
+                            label: const Text('อนุมัติ'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              _showRejectDialog(context, reservation);
+                            },
+                            icon: const Icon(Icons.close),
+                            label: const Text('ปฏิเสธ'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        _showApprovalDialog(context, reservation);
-                      },
-                      icon: const Icon(Icons.check),
-                      label: const Text('อนุมัติ'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             )
-          else
+          else if (!isRejected && showReturnButton)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: isRejected
-                  ? const SizedBox.shrink()
-                  : SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          _showShipmentDetailsDialog(context, reservation);
-                        },
-                        icon: const Icon(Icons.local_shipping),
-                        label: const Text('ดูรายละเอียดการส่ง'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF3ABDC5),
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    await _confirmReturn(context, reservation);
+                  },
+                  icon: const Icon(Icons.assignment_turned_in),
+                  label: const Text('ยืนยันรับคืน'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            )
+          else if (!isRejected)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    _showShipmentDetailsDialog(context, reservation);
+                  },
+                  icon: const Icon(Icons.local_shipping),
+                  label: const Text('ดูรายละเอียดการส่ง'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3ABDC5),
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(width: 8),
-          Expanded(child: Text(value)),
-        ],
-      ),
-    );
-  }
-
-  void _showApprovalDialog(
+  Future<void> _confirmReturn(
     BuildContext context,
     Map<String, dynamic> reservation,
-  ) {
-    final pageContext = context;
-    showDialog(
-      context: context,
-      builder: (context) => ApprovalDialog(
-        reservation: reservation,
-        onApprove: (trackingNumber, images, shippedBy, deliveryDate) async {
-          try {
-            // อนุมัติการจองและบันทึกข้อมูลการส่ง
-            await _approveReservation(
-              reservation,
-              trackingNumber,
-              images,
-              shippedBy,
-              deliveryDate,
+  ) async {
+    final cartItem = reservation['cart_item'] as Map<String, dynamic>?;
+    final product = reservation['product'] as Map<String, dynamic>?;
+    final cartItemId = cartItem?['id']?.toString();
+    final productId = product?['id']?.toString();
+    if (cartItemId == null || productId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ไม่พบข้อมูล cart item หรือ product')),
+      );
+      return;
+    }
+    try {
+      // Update cart_item status to RETURNED
+      await ApiServices.updateReservationItemStatus(
+        cartItemId: cartItemId,
+        status: 'RETURNED',
+      );
+      // Update product status to AVAILABLE
+      await ApiServices.updateProductStatus(
+        productId: productId,
+        status: 'AVAILABLE',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('ยืนยันรับคืนสำเร็จ')));
+        await _loadReservations();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาด: $e')));
+      }
+    }
+  }
+}
+
+Widget _buildInfoRow(String label, String value) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Row(
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(width: 8),
+        Expanded(child: Text(value)),
+      ],
+    ),
+  );
+}
+
+void _showApprovalDialog(
+  BuildContext context,
+  Map<String, dynamic> reservation,
+) {
+  final pageContext = context;
+  showDialog(
+    context: context,
+    builder: (context) => ApprovalDialog(
+      reservation: reservation,
+      onApprove: (trackingNumber, images, shippedBy, deliveryDate) async {
+        try {
+          // อนุมัติการจองและบันทึกข้อมูลการส่ง
+          await _approveReservation(
+            reservation,
+            trackingNumber,
+            images,
+            shippedBy,
+            deliveryDate,
+          );
+          if (context.mounted) {
+            Navigator.of(context).pop();
+            ScaffoldMessenger.of(pageContext).showSnackBar(
+              const SnackBar(
+                content: Text('อนุมัติการจองสำเร็จ'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
             );
-            if (mounted) {
+          }
+          // Always refresh data after approval
+          final parentState = pageContext
+              .findAncestorStateOfType<_ReservationApprovalPageState>();
+          if (parentState != null) {
+            parentState._loadReservations();
+          }
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(pageContext).showSnackBar(
+              SnackBar(
+                content: Text('เกิดข้อผิดพลาด: $e'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+          if (kDebugMode) print('Approval error: $e');
+        }
+      },
+    ),
+  );
+}
+
+void _showRejectDialog(BuildContext context, Map<String, dynamic> reservation) {
+  final reasonController = TextEditingController();
+  final pageContext = context;
+
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('ปฏิเสธการจอง'),
+      content: TextField(
+        controller: reasonController,
+        maxLines: 3,
+        decoration: const InputDecoration(
+          hintText: 'ระบุเหตุผล (ถ้ามี)',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('ยกเลิก'),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            await _rejectReservation(reservation, reasonController.text);
+            if (context.mounted) {
               Navigator.of(context).pop();
               ScaffoldMessenger.of(pageContext).showSnackBar(
-                const SnackBar(
-                  content: Text('อนุมัติการจองสำเร็จ'),
-                  backgroundColor: Colors.green,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-              _loadReservations();
-            }
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(pageContext).showSnackBar(
-                SnackBar(
-                  content: Text('เกิดข้อผิดพลาด: $e'),
-                  backgroundColor: Colors.red,
-                  duration: const Duration(seconds: 3),
-                ),
+                const SnackBar(content: Text('ปฏิเสธการจองสำเร็จ')),
               );
             }
-            if (kDebugMode) print('Approval error: $e');
-          }
-        },
-      ),
-    );
-  }
-
-  void _showRejectDialog(
-    BuildContext context,
-    Map<String, dynamic> reservation,
-  ) {
-    final reasonController = TextEditingController();
-    final pageContext = context;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('ปฏิเสธการจอง'),
-        content: TextField(
-          controller: reasonController,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: 'ระบุเหตุผล (ถ้ามี)',
-            border: OutlineInputBorder(),
-          ),
+            // Always refresh data after rejection
+            final parentState = pageContext
+                .findAncestorStateOfType<_ReservationApprovalPageState>();
+            if (parentState != null) {
+              parentState._loadReservations();
+            }
+          },
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          child: const Text('ปฏิเสธ'),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('ยกเลิก'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await _rejectReservation(reservation, reasonController.text);
-              if (mounted) {
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(pageContext).showSnackBar(
-                  const SnackBar(content: Text('ปฏิเสธการจองสำเร็จ')),
-                );
-                _loadReservations();
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('ปฏิเสธ'),
-          ),
-        ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
+}
 
-  void _showShipmentDetailsDialog(
-    BuildContext context,
-    Map<String, dynamic> reservation,
-  ) {
+void _showShipmentDetailsDialog(
+  BuildContext context,
+  Map<String, dynamic> reservation,
+) {
+  final cartItem = reservation['cart_item'] as Map<String, dynamic>?;
+  final trackingNumber = cartItem?['tracking_number']?.toString() ?? '-';
+  final images = cartItem?['shipment_images'] as List? ?? [];
+
+  final imageUrls = images
+      .map((e) => e?.toString() ?? '')
+      .where((e) => e.isNotEmpty)
+      .toList(growable: false);
+
+  showDialog(
+    context: context,
+    builder: (dialogContext) => _ShipmentDetailsDialog(
+      trackingNumber: trackingNumber,
+      imageUrls: imageUrls,
+    ),
+  );
+}
+
+Future<void> _approveReservation(
+  Map<String, dynamic> reservation,
+  String trackingNumber,
+  List<File> images,
+  String shippedBy,
+  DateTime deliveryDate,
+) async {
+  try {
     final cartItem = reservation['cart_item'] as Map<String, dynamic>?;
-    final trackingNumber = cartItem?['tracking_number']?.toString() ?? '-';
-    final images = cartItem?['shipment_images'] as List? ?? [];
+    final cartItemId = cartItem?['id']?.toString();
+    if (cartItemId == null || cartItemId.isEmpty) {
+      throw Exception('cart_item.id missing');
+    }
 
-    final imageUrls = images
-        .map((e) => e?.toString() ?? '')
-        .where((e) => e.isNotEmpty)
-        .toList(growable: false);
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => _ShipmentDetailsDialog(
-        trackingNumber: trackingNumber,
-        imageUrls: imageUrls,
-      ),
+    await ApiServices.updateReservationItemStatus(
+      cartItemId: cartItemId,
+      status: 'RENTED',
+      trackingNumber: trackingNumber,
+      images: images,
+      shippedBy: shippedBy,
+      deliveryDate: deliveryDate,
     );
+  } catch (e) {
+    if (kDebugMode) print('approveReservation error: $e');
   }
+}
 
-  Future<void> _approveReservation(
-    Map<String, dynamic> reservation,
-    String trackingNumber,
-    List<File> images,
-    String shippedBy,
-    DateTime deliveryDate,
-  ) async {
-    try {
-      final cartItem = reservation['cart_item'] as Map<String, dynamic>?;
-      final cartItemId = cartItem?['id']?.toString();
-      if (cartItemId == null || cartItemId.isEmpty) {
-        throw Exception('cart_item.id missing');
-      }
-
-      await ApiServices.updateReservationItemStatus(
-        cartItemId: cartItemId,
-        status: 'RENTED',
-        trackingNumber: trackingNumber,
-        images: images,
-        shippedBy: shippedBy,
-        deliveryDate: deliveryDate,
-      );
-    } catch (e) {
-      if (kDebugMode) print('approveReservation error: $e');
+Future<void> _rejectReservation(
+  Map<String, dynamic> reservation,
+  String reason,
+) async {
+  try {
+    final cartItem = reservation['cart_item'] as Map<String, dynamic>?;
+    final cartItemId = cartItem?['id']?.toString();
+    if (cartItemId == null || cartItemId.isEmpty) {
+      throw Exception('cart_item.id missing');
     }
-  }
 
-  Future<void> _rejectReservation(
-    Map<String, dynamic> reservation,
-    String reason,
-  ) async {
-    try {
-      final cartItem = reservation['cart_item'] as Map<String, dynamic>?;
-      final cartItemId = cartItem?['id']?.toString();
-      if (cartItemId == null || cartItemId.isEmpty) {
-        throw Exception('cart_item.id missing');
-      }
-
-      await ApiServices.updateReservationItemStatus(
-        cartItemId: cartItemId,
-        status: 'REJECT',
-        reason: reason,
-      );
-    } catch (e) {
-      if (kDebugMode) print('rejectReservation error: $e');
-    }
+    await ApiServices.updateReservationItemStatus(
+      cartItemId: cartItemId,
+      status: 'REJECT',
+      reason: reason,
+    );
+  } catch (e) {
+    if (kDebugMode) print('rejectReservation error: $e');
   }
 }
 
@@ -938,7 +1116,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
     if (kDebugMode) print('[Approval] Starting image picker...');
 
     try {
-      if (mounted) {
+      if (context.mounted) {
         setState(() => _isPickingImage = true);
       }
 
@@ -949,7 +1127,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
 
       if (kDebugMode) print('[Approval] Picked ${pickedFiles.length} images');
 
-      if (!mounted) {
+      if (!context.mounted) {
         if (kDebugMode) print('[Approval] Widget not mounted after pick');
         return;
       }
@@ -978,7 +1156,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
           }
         }
 
-        if (filesToAdd.isNotEmpty && mounted) {
+        if (filesToAdd.isNotEmpty && context.mounted) {
           if (kDebugMode)
             print(
               '[Approval] Adding ${filesToAdd.length} valid images to state',
@@ -998,7 +1176,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
         print('[Approval] Stack trace: $stackTrace');
       }
 
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('ไม่สามารถเลือกรูปได้: $e'),
@@ -1008,7 +1186,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
         );
       }
     } finally {
-      if (mounted) {
+      if (context.mounted) {
         if (kDebugMode) print('[Approval] Setting _isPickingImage to false');
         setState(() => _isPickingImage = false);
       }
@@ -1024,7 +1202,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
     if (kDebugMode) print('[Approval] Starting camera picker...');
 
     try {
-      if (mounted) {
+      if (context.mounted) {
         setState(() => _isPickingImage = true);
       }
 
@@ -1035,9 +1213,9 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
       );
 
       if (kDebugMode)
-        print('[Approval] Camera pick result: ${pickedFile?.path ?? "null"}');
+        print('[Approval] Camera pick result: \\${pickedFile?.path ?? "null"}');
 
-      if (!mounted) {
+      if (!context.mounted) {
         if (kDebugMode)
           print('[Approval] Widget not mounted after camera pick');
         return;
@@ -1048,10 +1226,12 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
         final exists = await file.exists();
 
         if (kDebugMode) {
-          print('[Approval] Camera image: ${pickedFile.path}, exists: $exists');
+          print(
+            '[Approval] Camera image: \\${pickedFile.path}, exists: $exists',
+          );
         }
 
-        if (exists && mounted) {
+        if (exists && context.mounted) {
           if (kDebugMode) print('[Approval] Adding camera image to state');
           setState(() {
             _images.add(file);
@@ -1061,7 +1241,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
         } else {
           if (kDebugMode)
             print(
-              '[Approval] Warning: Camera image does not exist at ${pickedFile.path}',
+              '[Approval] Warning: Camera image does not exist at \\${pickedFile.path}',
             );
         }
       } else {
@@ -1073,7 +1253,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
         print('[Approval] Stack trace: $stackTrace');
       }
 
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('ไม่สามารถถ่ายรูปได้: $e'),
@@ -1083,7 +1263,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
         );
       }
     } finally {
-      if (mounted) {
+      if (context.mounted) {
         if (kDebugMode) print('[Approval] Setting _isPickingImage to false');
         setState(() => _isPickingImage = false);
       }
@@ -1165,13 +1345,13 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
                                 context: context,
                                 initialTime: _deliveryTime ?? TimeOfDay.now(),
                               );
-                              if (pickedTime != null && mounted) {
+                              if (pickedTime != null && context.mounted) {
                                 setState(() {
                                   _deliveryDate = pickedDate;
                                   _deliveryTime = pickedTime;
                                 });
                               } else {
-                                if (mounted) {
+                                if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                       content: Text('กรุณาเลือกเวลาส่ง'),
@@ -1410,7 +1590,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
                                 combinedDeliveryDateTime,
                               );
                             } finally {
-                              if (mounted) {
+                              if (context.mounted) {
                                 setState(() => _isUploading = false);
                               }
                             }

@@ -67,6 +67,9 @@ class _RentalHistoryPageState extends State<RentalHistoryPage> {
               status = 'ปฏิเสธการเช่า';
               statusColor = Colors.red;
               rejectNote = cartItem['rejection_reason']?.toString();
+            } else if (cartItemStatus == 'RETURNED') {
+              status = 'คืนสินค้าแล้ว';
+              statusColor = Colors.grey;
             } else if (paidAt != null && paidAt.toString().isNotEmpty) {
               // carts->paid (paid_at is not null)
               if (cartItemStatus == 'RESERVED') {
@@ -128,31 +131,6 @@ class _RentalHistoryPageState extends State<RentalHistoryPage> {
     }
   }
 
-  void _reportProblem(BuildContext context, String itemName) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('แจ้งปัญหา'),
-        content: Text('คุณต้องการแจ้งปัญหาสำหรับ "$itemName" หรือไม่?'),
-        actions: [
-          TextButton(
-            child: const Text('ยกเลิก'),
-            onPressed: () => Navigator.pop(context),
-          ),
-          ElevatedButton(
-            child: const Text('แจ้งปัญหา'),
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('ระบบได้รับแจ้งปัญหาของ "$itemName"')),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -190,7 +168,6 @@ class _RentalHistoryPageState extends State<RentalHistoryPage> {
                     itemCount: rentalHistory.length,
                     itemBuilder: (context, index) {
                       final item = rentalHistory[index];
-                      final isActive = item['is_active'] ?? false;
                       final imageUrl = item['image']?.toString() ?? '';
                       final statusColor = item['status_color'] ?? Colors.grey;
 

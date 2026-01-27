@@ -19,6 +19,18 @@ export 'payment_service.dart';
 
 // Alias class สำหรับ backward compatibility
 class ApiServices {
+  /// อัปเดตสถานะของสินค้า (Product)
+  static Future<void> updateProductStatus({
+    required String productId,
+    required String status,
+  }) async {
+    final payload = {
+      'last_status': status,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    await updateProduct(productId, payload);
+  }
+
   /// เรียก Edge Function เพื่อส่ง push notification ไปยังผู้ใช้ (FCM)
   static Future<void> sendPushNotificationToUser({
     required String userId,
