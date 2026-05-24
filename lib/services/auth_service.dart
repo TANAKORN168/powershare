@@ -7,9 +7,14 @@ import 'package:powershare/models/responseModel.dart';
 import 'package:powershare/models/singupModel.dart';
 
 class AuthService {
-  static Future<Map<String, dynamic>> login(String email, String password) async {
+  static Future<Map<String, dynamic>> login(
+    String email,
+    String password,
+  ) async {
     try {
-      final authUrl = Uri.parse('${ApiConfig.baseUrl}/auth/v1/token?grant_type=password');
+      final authUrl = Uri.parse(
+        '${ApiConfig.baseUrl}/auth/v1/token?grant_type=password',
+      );
       final authHeaders = {
         'apikey': ApiConfig.apiKey,
         'Content-Type': 'application/json',
@@ -17,17 +22,35 @@ class AuthService {
       final authBody = jsonEncode({'email': email, 'password': password});
 
       if (kDebugMode) print('🔵 login: POST $authUrl');
-      final authResp = await http.post(authUrl, headers: authHeaders, body: authBody);
-      if (kDebugMode) print('🔵 login auth: status=${authResp.statusCode} body=${authResp.body}');
+      final authResp = await http.post(
+        authUrl,
+        headers: authHeaders,
+        body: authBody,
+      );
+      if (kDebugMode)
+        print(
+          '🔵 login auth: status=${authResp.statusCode} body=${authResp.body}',
+        );
 
       if (authResp.statusCode != 200) {
-        return {'responseCode': 'FAIL', 'responseMessage': 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'};
+        if (kDebugMode) {
+          print(
+            'login auth error: status=${authResp.statusCode} body=${authResp.body}',
+          );
+        }
+        return {
+          'responseCode': 'FAIL',
+          'responseMessage':
+              'อีเมลหรือรหัสผ่านไม่ถูกต้อง (${authResp.statusCode}): ${authResp.body}',
+        };
       }
 
       final authData = jsonDecode(authResp.body);
       final accessToken = authData['access_token'];
 
-      final usersUrl = Uri.parse('${ApiConfig.baseUrl}/rest/v1/users?email=eq.$email');
+      final usersUrl = Uri.parse(
+        '${ApiConfig.baseUrl}/rest/v1/users?email=eq.$email',
+      );
       final usersHeaders = {
         'apikey': ApiConfig.apiKey,
         'Authorization': 'Bearer $accessToken',
@@ -35,10 +58,17 @@ class AuthService {
 
       if (kDebugMode) print('🔵 login users: GET $usersUrl');
       final usersResp = await http.get(usersUrl, headers: usersHeaders);
-      if (kDebugMode) print('🔵 login users: status=${usersResp.statusCode} body=${usersResp.body}');
+      if (kDebugMode)
+        print(
+          '🔵 login users: status=${usersResp.statusCode} body=${usersResp.body}',
+        );
 
       if (usersResp.statusCode != 200) {
-        return {'responseCode': 'FAIL', 'responseMessage': 'ไม่พบข้อมูลผู้ใช้'};
+        return {
+          'responseCode': 'FAIL',
+          'responseMessage':
+              'ไม่พบข้อมูลผู้ใช้ (${usersResp.statusCode}): ${usersResp.body}',
+        };
       }
 
       final usersData = jsonDecode(usersResp.body) as List<dynamic>;
@@ -48,7 +78,10 @@ class AuthService {
 
       final user = usersData[0];
       if (user['role'] == 'Pending') {
-        return {'responseCode': 'FAIL', 'responseMessage': 'บัญชีของคุณรออนุมัติ'};
+        return {
+          'responseCode': 'FAIL',
+          'responseMessage': 'บัญชีของคุณรออนุมัติ',
+        };
       }
 
       return {
@@ -75,18 +108,83 @@ class AuthService {
         'password': signupModel.password,
       });
 
-      final signupResp = await http.post(signupUrl, headers: signupHeaders, body: signupBody);
-      if (signupResp.statusCode != 200) {
-        return ResponseModel(responseCode: 'FAIL', responseMessage: 'ไม่สามารถสร้างบัญชีได้');
+      final signupResp = await http.post(
+        signupUrl,
+        headers: signupHeaders,
+        body: signupBody,
+      );
+      if (!(signupResp.statusCode == 200 || signupResp.statusCode == 201)) {
+        if (kDebugMode) {
+          print(
+            'signup auth: status=${signupResp.statusCode} body=${signupResp.body}',
+          );
+        }
+        return ResponseModel(
+          responseCode: 'FAIL',
+          responseMessage:
+              'ไม่สามารถสร้างบัญชีได้ (${signupResp.statusCode}): ${signupResp.body}',
+        );
       }
 
       final signupData = jsonDecode(signupResp.body);
-      final userId = signupData['user']['id'];
+      final userId = signupData['user']?['id'];
+      final accessToken = signupData['access_token'];
 
-      return ResponseModel(responseCode: 'SUCCESS', responseMessage: 'สมัครสมาชิกสำเร็จ', user: userId);
+      if (userId == null || userId.toString().isEmpty) {
+        return ResponseModel(
+          responseCode: 'FAIL',
+          responseMessage: 'ไม่สามารถดึง user id จากผลสมัครได้',
+        );
+      }
+
+      if (accessToken == null || accessToken.toString().isEmpty) {
+        return ResponseModel(
+          responseCode: 'FAIL',
+          responseMessage:
+              'สมัครสมาชิกสำเร็จ แต่ไม่สามารถสร้างโปรไฟล์ได้ (ไม่พบ access token)',
+          user: userId,
+        );
+      }
+
+      final usersUrl = Uri.parse('${ApiConfig.baseUrl}/rest/v1/users');
+      final usersHeaders = {
+        'apikey': ApiConfig.apiKey,
+        'Authorization': 'Bearer $accessToken',
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation',
+      };
+      final usersBody = jsonEncode(signupModel.toJson(userId.toString()));
+
+      final usersResp = await http.post(
+        usersUrl,
+        headers: usersHeaders,
+        body: usersBody,
+      );
+
+      if (!(usersResp.statusCode == 200 || usersResp.statusCode == 201)) {
+        if (kDebugMode) {
+          print(
+            'signup users: status=${usersResp.statusCode} body=${usersResp.body}',
+          );
+        }
+        return ResponseModel(
+          responseCode: 'FAIL',
+          responseMessage: 'สร้างโปรไฟล์ผู้ใช้ไม่สำเร็จ',
+          user: userId,
+        );
+      }
+
+      return ResponseModel(
+        responseCode: 'SUCCESS',
+        responseMessage: 'สมัครสมาชิกสำเร็จ',
+        user: userId,
+      );
     } catch (e) {
       if (kDebugMode) print('signup error: $e');
-      return ResponseModel(responseCode: 'FAIL', responseMessage: 'เกิดข้อผิดพลาด: $e');
+      return ResponseModel(
+        responseCode: 'FAIL',
+        responseMessage: 'เกิดข้อผิดพลาด: $e',
+      );
     }
   }
 
@@ -134,7 +232,9 @@ class AuthService {
   }
 
   static Future<String> generatePasswordResetOTP(String email) async {
-    final url = Uri.parse('${ApiConfig.baseUrl}/rest/v1/rpc/generate_password_reset_otp');
+    final url = Uri.parse(
+      '${ApiConfig.baseUrl}/rest/v1/rpc/generate_password_reset_otp',
+    );
     final body = jsonEncode({'user_email': email});
 
     final resp = await http.post(url, headers: ApiConfig.headers, body: body);
@@ -142,7 +242,9 @@ class AuthService {
     if (resp.statusCode == 200) {
       return jsonDecode(resp.body) as String;
     }
-    throw Exception('generatePasswordResetOTP failed: ${resp.statusCode} ${resp.body}');
+    throw Exception(
+      'generatePasswordResetOTP failed: ${resp.statusCode} ${resp.body}',
+    );
   }
 
   static Future<bool> verifyOTPAndResetPassword({
@@ -150,7 +252,9 @@ class AuthService {
     required String otp,
     required String newPassword,
   }) async {
-    final url = Uri.parse('${ApiConfig.baseUrl}/rest/v1/rpc/verify_otp_and_reset_password');
+    final url = Uri.parse(
+      '${ApiConfig.baseUrl}/rest/v1/rpc/verify_otp_and_reset_password',
+    );
     final body = jsonEncode({
       'user_email': email,
       'input_otp': otp,

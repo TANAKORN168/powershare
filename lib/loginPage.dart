@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:powershare/pages/forgotPasswordPage.dart';
 import 'package:powershare/mainLayout.dart';
 import 'package:powershare/services/apiServices.dart';
@@ -25,6 +26,24 @@ class LoginPageState extends State<LoginPage> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _loading = false;
+  String _appVersion = '1.0.0';
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeAppVersion();
+  }
+
+  Future<void> _initializeAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      setState(() {
+        _appVersion = packageInfo.version;
+      });
+    } catch (e) {
+      if (kDebugMode) print('Error getting app version: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -225,6 +244,16 @@ class LoginPageState extends State<LoginPage> {
                             pageToNavigate: const RegisterPage(),
                           ),
                           SizedBox(height: 40),
+                          Align(
+                            alignment: Alignment.center,
+                            child: Text(
+                              'Version $_appVersion',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),

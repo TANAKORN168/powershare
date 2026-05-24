@@ -16,9 +16,11 @@ class AdminPage extends StatefulWidget {
 
 class _AdminPageState extends State<AdminPage> {
   late Future<List<Map<String, dynamic>>> _reservationsFuture;
+  late Future<List<Map<String, dynamic>>?> _pendingUsersFuture;
 
   void _refreshReservations() {
     _reservationsFuture = ApiServices.getReservations();
+    _pendingUsersFuture = ApiServices.getPendingUsers();
   }
 
   @override
@@ -85,13 +87,38 @@ class _AdminPageState extends State<AdminPage> {
                         subtitle: const Text(
                           'ตรวจสอบและอนุมัติ/ปฏิเสธคำขอของผู้ใช้',
                         ),
-                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                        trailing: FutureBuilder<List<Map<String, dynamic>>?>(
+                          future: _pendingUsersFuture,
+                          builder: (context, snapshot) {
+                            Widget badge = const SizedBox.shrink();
+                            if (snapshot.hasData && snapshot.data != null) {
+                              final pendingCount = snapshot.data!.length;
+                              if (pendingCount > 0) {
+                                badge = _buildBadge(pendingCount);
+                              }
+                            }
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                badge,
+                                if (badge is! SizedBox)
+                                  const SizedBox(width: 8),
+                                const Icon(Icons.arrow_forward_ios, size: 16),
+                              ],
+                            );
+                          },
+                        ),
                         onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const UserApprovalPage(),
-                            ),
-                          );
+                          Navigator.of(context)
+                              .push(
+                                MaterialPageRoute(
+                                  builder: (_) => const UserApprovalPage(),
+                                ),
+                              )
+                              .then((_) {
+                                if (!mounted) return;
+                                setState(_refreshReservations);
+                              });
                         },
                       ),
                     ),
@@ -134,14 +161,17 @@ class _AdminPageState extends State<AdminPage> {
                           },
                         ),
                         onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const ReservationApprovalPage(),
-                            ),
-                          ).then((_) {
-                            if (!mounted) return;
-                            setState(_refreshReservations);
-                          });
+                          Navigator.of(context)
+                              .push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const ReservationApprovalPage(),
+                                ),
+                              )
+                              .then((_) {
+                                if (!mounted) return;
+                                setState(_refreshReservations);
+                              });
                         },
                       ),
                     ),

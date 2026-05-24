@@ -543,6 +543,24 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                                       return;
                                     }
 
+                                    // ตรวจสอบการอนุมัติผู้ใช้
+                                    final isApprove =
+                                        user['is_approve'] == true ||
+                                        user['is_approve'] == 'true' ||
+                                        user['is_approve'] == 1;
+                                    if (!isApprove) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'ไม่ได้รับการอนุญาติกรุณาติดต่อ Admin',
+                                          ),
+                                        ),
+                                      );
+                                      return;
+                                    }
+
                                     if (_rentStart == null ||
                                         _rentEnd == null) {
                                       ScaffoldMessenger.of(

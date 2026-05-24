@@ -483,47 +483,134 @@ class RegisterPageState extends State<RegisterPage> {
                               return;
                             }
 
-                            String validatetionMessage = '';
-                            validatetionMessage =
+                            // ตรวจสอบ password ก่อน
+                            String validationMessage =
                                 TextFieldValidate.validatePassword(
                                   _passwordController.text.trim(),
                                 );
-                            validatetionMessage =
-                                TextFieldValidate.validateEmail(
-                                  _emailController.text.trim(),
-                                );
-                            validatetionMessage =
-                                TextFieldValidate.validateIdCardNumber(
-                                  _idCardNumberController.text.trim(),
-                                );
-                            validatetionMessage =
-                                TextFieldValidate.validateMobileNumber(
-                                  _phoneController.text.trim(),
-                                );
-                            validatetionMessage =
-                                TextFieldValidate.validateDate(
-                                  _birthDateController.text.trim(),
-                                  'วันเดือนปีเกิด',
-                                );
-                            validatetionMessage =
-                                TextFieldValidate.validateRequired(
-                                  _surnameController.text.trim(),
-                                  'นามสกุล',
-                                );
-                            validatetionMessage =
-                                TextFieldValidate.validateRequired(
-                                  _nameController.text.trim(),
-                                  'ชื่อ',
-                                );
-
-                            if (validatetionMessage != '') {
+                            if (validationMessage != '') {
                               Navigator.of(
                                 context,
                                 rootNavigator: true,
                               ).pop(); // ปิด loading
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text(validatetionMessage),
+                                  content: Text(validationMessage),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            // ตรวจสอบ email
+                            validationMessage = TextFieldValidate.validateEmail(
+                              _emailController.text.trim(),
+                            );
+                            if (validationMessage != '') {
+                              Navigator.of(
+                                context,
+                                rootNavigator: true,
+                              ).pop(); // ปิด loading
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(validationMessage),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            // ตรวจสอบ ID card
+                            validationMessage =
+                                TextFieldValidate.validateIdCardNumber(
+                                  _idCardNumberController.text.trim(),
+                                );
+                            if (validationMessage != '') {
+                              Navigator.of(
+                                context,
+                                rootNavigator: true,
+                              ).pop(); // ปิด loading
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(validationMessage),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            // ตรวจสอบเบอร์โทรศัพท์
+                            validationMessage =
+                                TextFieldValidate.validateMobileNumber(
+                                  _phoneController.text.trim(),
+                                );
+                            if (validationMessage != '') {
+                              Navigator.of(
+                                context,
+                                rootNavigator: true,
+                              ).pop(); // ปิด loading
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(validationMessage),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            // ตรวจสอบวันเกิด
+                            validationMessage = TextFieldValidate.validateDate(
+                              _birthDateController.text.trim(),
+                              'วันเดือนปีเกิด',
+                            );
+                            if (validationMessage != '') {
+                              Navigator.of(
+                                context,
+                                rootNavigator: true,
+                              ).pop(); // ปิด loading
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(validationMessage),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            // ตรวจสอบนามสกุล
+                            validationMessage =
+                                TextFieldValidate.validateRequired(
+                                  _surnameController.text.trim(),
+                                  'นามสกุล',
+                                );
+                            if (validationMessage != '') {
+                              Navigator.of(
+                                context,
+                                rootNavigator: true,
+                              ).pop(); // ปิด loading
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(validationMessage),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            // ตรวจสอบชื่อ
+                            validationMessage =
+                                TextFieldValidate.validateRequired(
+                                  _nameController.text.trim(),
+                                  'ชื่อ',
+                                );
+                            if (validationMessage != '') {
+                              Navigator.of(
+                                context,
+                                rootNavigator: true,
+                              ).pop(); // ปิด loading
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(validationMessage),
                                   backgroundColor: Colors.red,
                                 ),
                               );

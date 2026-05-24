@@ -38,7 +38,7 @@ class SignupModel {
 
   Map<String, dynamic> toJson(String uid) {
     return {
-      "users_uid": uid,
+      "id": uid,
       "name": name,
       "surname": surname,
       "birth_date": Utils.ConvertToIso8601(birthDate),
